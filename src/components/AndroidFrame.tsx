@@ -48,41 +48,49 @@ export const AndroidFrame: React.FC<AndroidFrameProps> = ({
         </div>
       </div>
 
-      {/* Main Container: Android Device Shell or Fluid Mobile View */}
+      {/* Main Container: Android Device Shell on desktop or clean edge-to-edge mobile app */}
       <div
-        className={`w-full transition-all duration-300 ${
+        className={`w-full h-screen sm:h-[860px] transition-all duration-300 ${
           deviceMode === 'phone'
-            ? 'sm:max-w-[412px] sm:h-[860px] sm:rounded-[44px] sm:ring-[10px] sm:ring-stone-900 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)]'
-            : 'max-w-md min-h-screen sm:rounded-3xl sm:shadow-xl'
+            ? 'sm:max-w-[412px] sm:rounded-[44px] sm:ring-[10px] sm:ring-stone-900 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)]'
+            : 'sm:max-w-[500px] sm:rounded-3xl sm:shadow-xl'
         } bg-[#FAF8F5] relative flex flex-col overflow-hidden`}
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
       >
-        {/* Android Punch Hole Camera (only on desktop phone mode) */}
+        {/* Android Punch Hole Camera (only on desktop phone simulation mode) */}
         {deviceMode === 'phone' && (
           <div className="hidden sm:block absolute top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-black rounded-full z-40 pointer-events-none ring-1 ring-stone-800" />
         )}
 
-        {/* Realistic Android / iOS Status Bar */}
-        <div className="w-full pt-2.5 pb-1 px-6 flex items-center justify-between text-stone-800 text-[13px] font-semibold tracking-tight select-none z-30 shrink-0">
-          <span className="font-sans tabular-nums pl-0.5">{currentTime}</span>
-          <div className="flex items-center gap-2">
-            <Signal className="w-3.5 h-3.5 stroke-[2.2]" />
-            <Wifi className="w-3.5 h-3.5 stroke-[2.2]" />
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-bold">84%</span>
-              <Battery className="w-4 h-4 stroke-[2.2] fill-stone-800" />
+        {/* Realistic Status Bar: ONLY shown on desktop phone preview mode */}
+        {deviceMode === 'phone' && (
+          <div className="hidden sm:flex w-full pt-2.5 pb-1 px-6 items-center justify-between text-stone-800 text-[13px] font-semibold tracking-tight select-none z-30 shrink-0">
+            <span className="font-sans tabular-nums pl-0.5">{currentTime}</span>
+            <div className="flex items-center gap-2">
+              <Signal className="w-3.5 h-3.5 stroke-[2.2]" />
+              <Wifi className="w-3.5 h-3.5 stroke-[2.2]" />
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-bold">84%</span>
+                <Battery className="w-4 h-4 stroke-[2.2] fill-stone-800" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Scrollable Screen Content */}
-        <div className="flex-1 overflow-y-auto no-scrollbar relative flex flex-col">
+        {/* Screen Area: Non-scrolling flex container where children manage their scrollable bodies and fixed nav */}
+        <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
           {children}
         </div>
 
-        {/* Android Navigation Bar Pill Indicator */}
-        <div className="w-full pb-1 pt-0.5 flex justify-center bg-[#FAF8F5] shrink-0 select-none">
-          <div className="w-32 h-1 bg-stone-300 rounded-full" />
-        </div>
+        {/* Android Navigation Bar Pill Indicator: ONLY shown on desktop phone preview */}
+        {deviceMode === 'phone' && (
+          <div className="hidden sm:flex w-full pb-1 pt-0.5 justify-center bg-[#FAF8F5] shrink-0 select-none">
+            <div className="w-32 h-1 bg-stone-300 rounded-full" />
+          </div>
+        )}
       </div>
     </div>
   );

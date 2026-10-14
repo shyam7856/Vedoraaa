@@ -275,36 +275,23 @@ export function saveDocHighlights(documentId: string, items: HighlightItem[]): v
   }
 }
 
-// Retrieve all saved highlights across imported documents and books
+export function deleteDocHighlight(documentId: string, highlightId: string): void {
+  const current = loadDocHighlights(documentId);
+  const filtered = current.filter((h) => h.id !== highlightId);
+  saveDocHighlights(documentId, filtered);
+}
+
+// Retrieve all saved highlights across real user documents
 export function getAllSavedHighlights(): Array<HighlightItem & { documentName: string }> {
   const docs = loadDocumentsMetadata();
   const allHighlights: Array<HighlightItem & { documentName: string }> = [];
 
-  // From imported documents
   for (const doc of docs) {
     const highlights = loadDocHighlights(doc.id);
     for (const hl of highlights) {
       allHighlights.push({
         ...hl,
         documentName: doc.name,
-      });
-    }
-  }
-
-  // From sample books
-  const sampleBookIds = [
-    { id: 'psychology-of-money', name: 'The Psychology of Money' },
-    { id: 'atomic-habits', name: 'Atomic Habits' },
-    { id: 'design-of-everyday-things', name: 'The Design of Everyday Things' },
-    { id: 'laws-of-ux', name: 'Laws of UX' },
-  ];
-
-  for (const sb of sampleBookIds) {
-    const highlights = loadDocHighlights(sb.id);
-    for (const hl of highlights) {
-      allHighlights.push({
-        ...hl,
-        documentName: sb.name,
       });
     }
   }
@@ -332,6 +319,13 @@ export function saveDocNotes(documentId: string, notes: NoteItem[]): void {
   }
 }
 
+export function deleteDocNote(documentId: string, noteId: string): void {
+  const current = loadDocNotes(documentId);
+  const filtered = current.filter((n) => n.id !== noteId);
+  saveDocNotes(documentId, filtered);
+}
+
+// Retrieve all saved notes across real user documents
 export function getAllSavedNotes(): NoteItem[] {
   const docs = loadDocumentsMetadata();
   const allNotes: NoteItem[] = [];
@@ -342,23 +336,6 @@ export function getAllSavedNotes(): NoteItem[] {
       allNotes.push({
         ...n,
         documentName: doc.name,
-      });
-    }
-  }
-
-  const sampleBookIds = [
-    { id: 'psychology-of-money', name: 'The Psychology of Money' },
-    { id: 'atomic-habits', name: 'Atomic Habits' },
-    { id: 'design-of-everyday-things', name: 'The Design of Everyday Things' },
-    { id: 'laws-of-ux', name: 'Laws of UX' },
-  ];
-
-  for (const sb of sampleBookIds) {
-    const notes = loadDocNotes(sb.id);
-    for (const n of notes) {
-      allNotes.push({
-        ...n,
-        documentName: sb.name,
       });
     }
   }
@@ -411,6 +388,7 @@ export function toggleDocPageBookmark(documentId: string, page: number): boolean
   return !exists;
 }
 
+// Retrieve all saved bookmarks across real user documents
 export function getAllSavedBookmarks(): BookmarkItem[] {
   const docs = loadDocumentsMetadata();
   const allBookmarks: BookmarkItem[] = [];
@@ -424,26 +402,6 @@ export function getAllSavedBookmarks(): BookmarkItem[] {
         documentName: doc.name,
         page,
         createdAt: doc.lastOpened || doc.dateAdded,
-      });
-    }
-  }
-
-  const sampleBookIds = [
-    { id: 'psychology-of-money', name: 'The Psychology of Money' },
-    { id: 'atomic-habits', name: 'Atomic Habits' },
-    { id: 'design-of-everyday-things', name: 'The Design of Everyday Things' },
-    { id: 'laws-of-ux', name: 'Laws of UX' },
-  ];
-
-  for (const sb of sampleBookIds) {
-    const pages = loadDocBookmarkedPages(sb.id);
-    for (const page of pages) {
-      allBookmarks.push({
-        id: `bm_${sb.id}_${page}`,
-        documentId: sb.id,
-        documentName: sb.name,
-        page,
-        createdAt: Date.now(),
       });
     }
   }

@@ -1,7 +1,9 @@
 package com.example
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -9,6 +11,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -20,6 +23,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,19 +40,80 @@ import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
 
+  private var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+  private val filePickerLauncher = registerForActivityResult(
+    ActivityResultContracts.StartActivityForResult()
+  ) { result ->
+    val intent = result.data
+    val results: Array<Uri>? = if (result.resultCode == Activity.RESULT_OK && intent != null) {
+      val clipData = intent.clipData
+      if (clipData != null && clipData.itemCount > 0) {
+        val list = mutableListOf<Uri>()
+        for (i in 0 until clipData.itemCount) {
+          list.add(clipData.getItemAt(i).uri)
+        }
+        list.toTypedArray()
+      } else if (intent.data != null) {
+        arrayOf(intent.data!!)
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+
+    filePathCallback?.onReceiveValue(results)
+    filePathCallback = null
+  }
+
+  private fun launchFileChooser(
+    callback: ValueCallback<Array<Uri>>?,
+    params: WebChromeClient.FileChooserParams?
+  ): Boolean {
+    filePathCallback?.onReceiveValue(null)
+    filePathCallback = callback
+
+    val intent = try {
+      params?.createIntent() ?: Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        type = "application/pdf"
+        addCategory(Intent.CATEGORY_OPENABLE)
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      }
+    } catch (e: Exception) {
+      Intent(Intent.ACTION_GET_CONTENT).apply {
+        type = "application/pdf"
+        addCategory(Intent.CATEGORY_OPENABLE)
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      }
+    }
+
+    return try {
+      filePickerLauncher.launch(intent)
+      true
+    } catch (e: Exception) {
+      Log.e("VedoraPicker", "Failed to launch document picker", e)
+      filePathCallback?.onReceiveValue(null)
+      filePathCallback = null
+      false
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
     setContent {
-      VedoraHost()
+      VedoraHost(onShowFileChooser = ::launchFileChooser)
     }
   }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun VedoraHost() {
+fun VedoraHost(
+  onShowFileChooser: ((ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean)? = null
+) {
   var webViewInstance by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
 
@@ -128,6 +193,17 @@ fun VedoraHost() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
               Log.d("VedoraJS", "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()}")
               return true
+            }
+
+            override fun onShowFileChooser(
+              view: WebView?,
+              filePathCallback: ValueCallback<Array<Uri>>?,
+              fileChooserParams: FileChooserParams?
+            ): Boolean {
+              if (onShowFileChooser != null) {
+                return onShowFileChooser(filePathCallback, fileChooserParams)
+              }
+              return super.onShowFileChooser(view, filePathCallback, fileChooserParams)
             }
           }
 

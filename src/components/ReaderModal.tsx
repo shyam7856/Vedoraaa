@@ -19,6 +19,8 @@ import {
   NoteItem,
   ReaderTheme,
   ReaderViewMode,
+  ReaderFont,
+  READER_FONTS,
 } from '../types';
 import {
   getPdfBlob,
@@ -77,8 +79,41 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   >(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Reader Settings: Theme, Zoom, Layout Mode, Rotation
-  const [theme, setTheme] = useState<ReaderTheme>('light');
+  // Reader Settings: Theme, Font, Zoom, Layout Mode, Rotation with persistent storage
+  const [theme, setTheme] = useState<ReaderTheme>(() => {
+    try {
+      const saved = localStorage.getItem('vedora_reader_theme') as ReaderTheme;
+      if (saved && (saved === 'light' || saved === 'sepia' || saved === 'dark')) {
+        return saved;
+      }
+    } catch {}
+    return 'light';
+  });
+
+  const [fontFamily, setFontFamily] = useState<ReaderFont>(() => {
+    try {
+      const saved = localStorage.getItem('vedora_reader_font') as ReaderFont;
+      if (saved && ['sans', 'serif', 'editorial', 'mono'].includes(saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'sans';
+  });
+
+  const handleUpdateTheme = (newTheme: ReaderTheme) => {
+    setTheme(newTheme);
+    try {
+      localStorage.setItem('vedora_reader_theme', newTheme);
+    } catch {}
+  };
+
+  const handleUpdateFont = (newFont: ReaderFont) => {
+    setFontFamily(newFont);
+    try {
+      localStorage.setItem('vedora_reader_font', newFont);
+    } catch {}
+  };
+
   const [viewMode, setViewMode] = useState<ReaderViewMode>(() => {
     try {
       const saved = localStorage.getItem('vedora_reader_view_mode') as ReaderViewMode;
@@ -362,9 +397,12 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     ? 'text-[#E8E0D3] hover:text-white'
     : 'text-[#777064] hover:text-[#302C26]';
 
+  const fontClass =
+    READER_FONTS.find((f) => f.id === fontFamily)?.fontClass || 'font-sans';
+
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col justify-between select-none animate-in fade-in duration-150 ${readerBgClass}`}
+      className={`fixed inset-0 z-50 flex flex-col justify-between select-none animate-in fade-in duration-150 ${readerBgClass} ${fontClass}`}
     >
       {/* Toast Alert */}
       {toastMessage && (
@@ -391,6 +429,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       {/* Top App Bar with Literary Elegance */}
       <header
         className={`sticky top-0 z-20 backdrop-blur-md px-4 py-2.5 flex items-center justify-between border-b transition-colors ${headerFooterBg}`}
+        style={{
+          paddingTop: 'max(0.625rem, env(safe-area-inset-top, 0px))',
+        }}
       >
         <div className="flex items-center gap-2">
           <button
@@ -519,7 +560,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               Loading original PDF pages, text layer & fonts...
             </p>
           </div>
-        ) : book.isImported && pdfDoc ? (
+        ) : pdfDoc ? (
           <ContinuousPdfViewer
             pdfDoc={pdfDoc}
             documentId={book.id}
@@ -542,49 +583,21 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             activeSearchMatch={activeSearchMatch}
           />
         ) : (
-          <div className="flex-1 overflow-y-auto px-6 py-8 max-w-xl mx-auto w-full leading-relaxed select-text">
-            <div className="text-center mb-6">
-              <span className="text-xs uppercase tracking-widest text-stone-500 font-medium font-sans">
-                {book.id === 'atomic-habits' ? 'CHAPTER 1' : 'CHAPTER 2'}
-              </span>
-              <h1 className="font-serif-display text-2xl sm:text-3xl font-bold mt-2 tracking-tight">
-                {book.id === 'atomic-habits'
-                  ? 'The Surprising Power of Atomic Habits'
-                  : book.id === 'design-of-everyday-things'
-                  ? 'The Psychopathology of Everyday Things'
-                  : 'The Power of Compounding'}
-              </h1>
-            </div>
-            <div className="font-editorial text-[17px] sm:text-[18px] space-y-5 leading-[1.75]">
-              {book.id === 'atomic-habits' ? (
-                <>
-                  <p className="bg-[#FEF08A]/70 px-2 py-1 rounded-sm text-stone-900 border-l-2 border-amber-500 shadow-2xs">
-                    Habits are the compound interest of self-improvement. Getting 1 percent better every day counts for a lot in the long-run.
-                  </p>
-                  <p>
-                    It is so easy to overestimate the importance of one defining moment and underestimate the value of making small improvements on a daily basis.
-                  </p>
-                  <blockquote className="my-6 pl-4 italic border-l-[3px] border-[#154D43] py-1 text-lg">
-                    “You do not rise to the level of your goals. You fall to the level of your systems.”
-                  </blockquote>
-                </>
-              ) : (
-                <>
-                  <p className="bg-[#FEF08A]/70 px-2 py-1 rounded-sm text-stone-900 border-l-2 border-amber-500 shadow-2xs">
-                    The first rule of compounding is to never interrupt it unnecessarily. Give it time, and it will do its work for you.
-                  </p>
-                  <p>
-                    Compounding is powerful because it builds on itself. The returns you earn generate their own returns, leading to exponential growth over time.
-                  </p>
-                  <blockquote className="my-6 pl-4 italic border-l-[3px] border-[#154D43] py-1 text-lg">
-                    “Wealth is not about income or intelligence. It’s about behaviour.”
-                  </blockquote>
-                  <p>
-                    More than 2,000 books have been written on Warren Buffett. He is a phenomenal investor, but few appreciate that his skill was investing, while his secret was time.
-                  </p>
-                </>
-              )}
-            </div>
+          <div className="my-auto flex flex-col items-center justify-center text-center p-8 max-w-sm mx-auto">
+            <AlertCircle className="w-12 h-12 text-stone-400 dark:text-zinc-500 mb-3" />
+            <h4 className="font-serif-display font-bold text-base text-stone-800 dark:text-zinc-200">
+              No Document Data
+            </h4>
+            <p className="text-xs text-stone-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
+              The PDF file for "{book.fileName || book.title}" is not available in local storage.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 px-4 py-2 bg-[#154D43] text-white text-xs font-semibold rounded-xl hover:bg-[#0E3A32] cursor-pointer"
+            >
+              Back to Library
+            </button>
           </div>
         )}
       </div>
@@ -592,6 +605,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       {/* Reader Bottom Controls */}
       <footer
         className={`sticky bottom-0 z-20 backdrop-blur-md border-t px-4 py-3 transition-colors ${headerFooterBg}`}
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+        }}
       >
         {/* Progress Slider */}
         <div className="max-w-md mx-auto mb-2.5">
@@ -678,11 +694,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         isOpen={activeDrawer === 'appearance'}
         onClose={() => setActiveDrawer(null)}
         theme={theme}
-        onChangeTheme={setTheme}
+        onChangeTheme={handleUpdateTheme}
         zoomScale={zoomScale}
         onChangeZoom={setZoomScale}
         viewMode={viewMode}
         onChangeViewMode={handleUpdateViewMode}
+        fontFamily={fontFamily}
+        onChangeFont={handleUpdateFont}
       />
 
       {/* 4. NOTE DRAWER */}

@@ -10,8 +10,10 @@ import {
   ScrollText,
   FileText,
   BookOpen,
+  Type,
+  Info,
 } from 'lucide-react';
-import { ReaderTheme, ReaderViewMode } from '../../types';
+import { ReaderTheme, ReaderViewMode, ReaderFont, READER_FONTS } from '../../types';
 
 interface AppearanceDrawerProps {
   isOpen: boolean;
@@ -22,6 +24,8 @@ interface AppearanceDrawerProps {
   onChangeZoom: (newZoom: number) => void;
   viewMode: ReaderViewMode;
   onChangeViewMode: (mode: ReaderViewMode) => void;
+  fontFamily: ReaderFont;
+  onChangeFont: (font: ReaderFont) => void;
 }
 
 export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
@@ -33,6 +37,8 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
   onChangeZoom,
   viewMode,
   onChangeViewMode,
+  fontFamily,
+  onChangeFont,
 }) => {
   if (!isOpen) return null;
 
@@ -182,7 +188,54 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
             </div>
           </div>
 
-          {/* 3. Zoom Controls for Authentic PDF */}
+          {/* 3. Reading Typography / Font Selector */}
+          <div className={`p-4 rounded-2xl border ${cardBg}`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Type className="w-3.5 h-3.5" />
+                <span>Reading Typography</span>
+              </span>
+              <span className="text-[11px] font-bold text-[#154D43] dark:text-teal-400">
+                {READER_FONTS.find((f) => f.id === fontFamily)?.name}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {READER_FONTS.map((f) => {
+                const isSelected = fontFamily === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => onChangeFont(f.id)}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? `${activeRing} bg-[#FAF8F1] dark:bg-zinc-800`
+                        : 'border-[#E4DCCE] dark:border-zinc-700/60 hover:bg-black/5 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold leading-tight ${f.fontClass}`}>
+                      {f.name}
+                    </div>
+                    <div className="text-[10px] text-stone-500 dark:text-zinc-400 mt-0.5 truncate">
+                      {f.description}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Explanatory notice for authentic PDF vector layout */}
+            <div className="mt-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-stone-600 dark:text-zinc-300 flex items-start gap-2 leading-relaxed">
+              <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Applies to reader interface, notes, annotations, and text extraction layer.
+                <strong className="font-semibold block mt-0.5">Note:</strong> Original PDF pages retain their author-embedded typographic vector glyphs; scanned or image-based pages cannot be reflowed.
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Zoom Controls for Authentic PDF */}
           <div className={`p-4 rounded-2xl border ${cardBg}`}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider">

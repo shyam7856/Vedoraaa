@@ -180,13 +180,34 @@ export const BookCover: React.FC<BookCoverProps> = ({ book, size = 'md', classNa
             </div>
           </div>
         );
-      default:
+      default: {
+        const titleStr = book.fileName || book.title || 'Document';
         return (
-          <div className="w-full h-full bg-[#E5E7EB] text-stone-800 flex flex-col justify-between p-2 select-none border-l-[3px] border-stone-400">
-            <h4 className="font-serif-display font-bold text-[10px]">{book.title}</h4>
-            <p className="text-[7px] text-stone-600">{book.author}</p>
+          <div className="w-full h-full bg-[#154D43] text-stone-100 flex flex-col justify-between p-2 select-none border-l-[3px] border-teal-900 shadow-inner relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[5px] uppercase font-black tracking-widest text-teal-300 bg-teal-950/60 px-1 py-0.2 rounded-xs">
+                PDF
+              </span>
+              <span className="text-[5px] text-teal-200/80 font-mono">
+                {book.totalPages || 1}p
+              </span>
+            </div>
+            <div className="my-auto text-left py-1">
+              <h4
+                className="font-serif-display font-bold leading-[1.1] text-white line-clamp-3 tracking-tight"
+                style={{ fontSize: size === 'sm' ? '7px' : size === 'md' ? '10px' : '14px' }}
+              >
+                {titleStr.replace(/\.pdf$/i, '')}
+              </h4>
+            </div>
+            <div className="text-left pt-0.5 border-t border-teal-600/30">
+              <p className="font-sans font-medium text-teal-200/70 text-[5.5px] truncate">
+                {book.fileSize || 'Local Document'}
+              </p>
+            </div>
           </div>
         );
+      }
     }
   };
 

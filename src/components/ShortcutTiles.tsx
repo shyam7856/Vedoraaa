@@ -4,17 +4,24 @@ import { BookOpen, Heart, FileText, Highlighter } from 'lucide-react';
 interface ShortcutTilesProps {
   onSelectCategory: (category: 'all' | 'favorites' | 'notes' | 'highlights') => void;
   activeCategory?: string | null;
+  counts?: {
+    all: number;
+    favorites: number;
+    notes: number;
+    highlights: number;
+  };
 }
 
 export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
   onSelectCategory,
   activeCategory,
+  counts,
 }) => {
   const shortcuts = [
     {
       id: 'all' as const,
-      label: 'All Books',
-      count: '24 files',
+      label: 'All Files',
+      count: counts ? `${counts.all} ${counts.all === 1 ? 'file' : 'files'}` : 'Library',
       icon: BookOpen,
       bgColor: 'bg-[#EEF6FB]',
       iconColor: 'text-[#2563EB]',
@@ -24,7 +31,7 @@ export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
     {
       id: 'favorites' as const,
       label: 'Favorites',
-      count: '6 files',
+      count: counts ? `${counts.favorites} ${counts.favorites === 1 ? 'file' : 'files'}` : 'Favorites',
       icon: Heart,
       bgColor: 'bg-[#FDEEF1]',
       iconColor: 'text-[#F43F5E]',
@@ -34,7 +41,7 @@ export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
     {
       id: 'notes' as const,
       label: 'Notes',
-      count: '18 notes',
+      count: counts ? `${counts.notes} ${counts.notes === 1 ? 'note' : 'notes'}` : 'Notes',
       icon: FileText,
       bgColor: 'bg-[#FEF7EC]',
       iconColor: 'text-[#D97706]',
@@ -44,7 +51,7 @@ export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
     {
       id: 'highlights' as const,
       label: 'Highlights',
-      count: '82 items',
+      count: counts ? `${counts.highlights} ${counts.highlights === 1 ? 'item' : 'items'}` : 'Highlights',
       icon: Highlighter,
       bgColor: 'bg-[#EDF8F1]',
       iconColor: 'text-[#059669]',
@@ -74,7 +81,7 @@ export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
               <span className="font-semibold text-stone-800 text-[11px] leading-tight block truncate w-full px-1">
                 {item.label}
               </span>
-              <span className="text-[10px] text-stone-500 font-normal mt-0.5 block truncate w-full">
+              <span className="text-[10px] text-stone-500 font-normal mt-0.5 block truncate w-full tabular-nums">
                 {item.count}
               </span>
             </button>

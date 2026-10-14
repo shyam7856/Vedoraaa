@@ -56,6 +56,15 @@ export type ReaderTheme = 'light' | 'sepia' | 'dark';
 
 export type ReaderViewMode = 'continuous' | 'single';
 
+export type ReaderFont = 'sans' | 'serif' | 'editorial' | 'mono';
+
+export const READER_FONTS: { id: ReaderFont; name: string; fontClass: string; description: string }[] = [
+  { id: 'sans', name: 'Plus Jakarta Sans', fontClass: 'font-sans', description: 'Modern clean sans-serif' },
+  { id: 'serif', name: 'Playfair Display', fontClass: 'font-serif-display', description: 'Literary display serif' },
+  { id: 'editorial', name: 'Newsreader', fontClass: 'font-editorial', description: 'Book editorial serif' },
+  { id: 'mono', name: 'JetBrains / System Mono', fontClass: 'font-mono', description: 'Technical monospace' },
+];
+
 export interface Book {
   id: string;
   title: string;

@@ -40,17 +40,11 @@ export const RecentlyOpened: React.FC<RecentlyOpenedProps> = ({
             </div>
             <div className="text-left leading-tight">
               <h4 className="font-semibold text-stone-900 text-[13px] tracking-tight truncate group-hover:text-[#154D43] transition-colors">
-                {book.id === 'atomic-habits' ? 'Atomic' : book.id === 'design-of-everyday-things' ? 'The Design of' : book.title}
+                {book.fileName || book.title}
               </h4>
-              {book.id === 'design-of-everyday-things' ? (
-                <p className="font-semibold text-stone-900 text-[13px] tracking-tight truncate group-hover:text-[#154D43] transition-colors">
-                  Everyday Things
-                </p>
-              ) : (
-                <p className="text-stone-500 text-[11px] truncate mt-0.5">
-                  {book.author}
-                </p>
-              )}
+              <p className="text-stone-500 text-[11px] truncate mt-0.5">
+                {book.totalPages ? `${book.totalPages} pages` : book.author}
+              </p>
               <p className="text-stone-400 text-[10px] mt-0.5 font-medium">
                 {book.fileType} • {book.fileSize}
               </p>

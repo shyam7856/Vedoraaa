@@ -35,10 +35,10 @@ export const ContinueReadingCard: React.FC<ContinueReadingCardProps> = ({
         </div>
         <div className="flex-1 min-w-0 pr-1">
           <h3 className="font-bold text-white text-[15px] sm:text-[16px] leading-[1.25] tracking-tight truncate">
-            {book.title}
+            {book.fileName || book.title}
           </h3>
           <p className="text-teal-200/75 text-xs font-normal mt-0.5 truncate">
-            {book.author}
+            {book.totalPages ? `${book.totalPages} pages • PDF` : book.author}
           </p>
           <div className="mt-3 flex items-center gap-2.5">
             <div className="flex-1 h-1.5 bg-[#0C322B] rounded-full overflow-hidden">

@@ -203,7 +203,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   }, [documents, activeFilter, searchQuery, sortBy]);
 
   return (
-    <div className="flex-1 px-5 pt-3 pb-6 flex flex-col justify-between">
+    <div className="flex-1 px-4 sm:px-5 pt-3 pb-6 flex flex-col min-h-0">
       <input
         ref={fileInputRef}
         type="file"
@@ -212,7 +212,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         onChange={handleFileChange}
         className="hidden"
       />
-      <div>
+      <div className="flex-1 flex flex-col min-h-0">
         <header className="flex items-center justify-between pt-1 pb-3">
           <div>
             <h1 className="font-serif-display font-bold text-[28px] text-stone-900 tracking-tight leading-none">
