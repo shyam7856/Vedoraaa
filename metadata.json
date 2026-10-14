@@ -1,0 +1,6 @@
+{
+  "name": "VEDORA - Your Reading Space",
+  "description": "A refined, mobile-first reading app for PDF books and reading progress.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
