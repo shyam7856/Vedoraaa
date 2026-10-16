@@ -83,14 +83,18 @@ export const SinglePageLayout: React.FC<SinglePageLayoutProps> = ({
 
   // Touch Swipe Gesture for mobile readers with horizontal axis validation
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
+    // Only enable page swipe when at default zoom (not zoomed in), avoiding accidental page turns
+    if (e.touches.length === 1 && zoomScale <= 1.05) {
       touchStartXRef.current = e.touches[0].clientX;
       touchStartYRef.current = e.touches[0].clientY;
+    } else {
+      touchStartXRef.current = null;
+      touchStartYRef.current = null;
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    if (zoomScale > 1.05 || touchStartXRef.current === null || touchStartYRef.current === null) return;
     const touchEndX = e.changedTouches[0].clientX;
     const touchEndY = e.changedTouches[0].clientY;
     const diffX = touchEndX - touchStartXRef.current;
@@ -98,8 +102,8 @@ export const SinglePageLayout: React.FC<SinglePageLayoutProps> = ({
     touchStartXRef.current = null;
     touchStartYRef.current = null;
 
-    // Only recognize swipe if horizontal movement is dominant and > 40px
-    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY) * 1.2) {
+    // Only recognize swipe if horizontal movement is dominant and > 45px
+    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY) * 1.3) {
       if (diffX < 0 && validTarget < totalPages) {
         // Swiped left -> Next page
         onPageChange(validTarget + 1);

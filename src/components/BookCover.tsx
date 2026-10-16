@@ -1,5 +1,6 @@
 import React from 'react';
 import { Book } from '../types';
+import { useTheme } from '../utils/ThemeContext';
 
 interface BookCoverProps {
   book: Book;
@@ -8,6 +9,7 @@ interface BookCoverProps {
 }
 
 export const BookCover: React.FC<BookCoverProps> = ({ book, size = 'md', className = '' }) => {
+  const { theme } = useTheme();
   const sizeClasses = {
     sm: 'w-[52px] h-[74px] text-[6px]',
     md: 'w-[96px] h-[134px] text-[9px]',
@@ -182,13 +184,26 @@ export const BookCover: React.FC<BookCoverProps> = ({ book, size = 'md', classNa
         );
       default: {
         const titleStr = book.fileName || book.title || 'Document';
+        const coverBg = book.coverBgColor || theme.brandPrimary;
         return (
-          <div className="w-full h-full bg-[#154D43] text-stone-100 flex flex-col justify-between p-2 select-none border-l-[3px] border-teal-900 shadow-inner relative overflow-hidden">
+          <div
+            className="w-full h-full text-white flex flex-col justify-between p-2 select-none border-l-[3px] shadow-inner relative overflow-hidden"
+            style={{
+              backgroundColor: coverBg,
+              borderLeftColor: theme.secondary,
+            }}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[5px] uppercase font-black tracking-widest text-teal-300 bg-teal-950/60 px-1 py-0.2 rounded-xs">
+              <span
+                className="text-[5px] uppercase font-black tracking-widest px-1 py-0.2 rounded-xs"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  color: theme.mutedAccent,
+                }}
+              >
                 PDF
               </span>
-              <span className="text-[5px] text-teal-200/80 font-mono">
+              <span className="text-[5px] text-white/80 font-mono">
                 {book.totalPages || 1}p
               </span>
             </div>
@@ -200,8 +215,8 @@ export const BookCover: React.FC<BookCoverProps> = ({ book, size = 'md', classNa
                 {titleStr.replace(/\.pdf$/i, '')}
               </h4>
             </div>
-            <div className="text-left pt-0.5 border-t border-teal-600/30">
-              <p className="font-sans font-medium text-teal-200/70 text-[5.5px] truncate">
+            <div className="text-left pt-0.5 border-t border-white/20">
+              <p className="font-sans font-medium text-white/70 text-[5.5px] truncate">
                 {book.fileSize || 'Local Document'}
               </p>
             </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Book } from '../types';
 import { BookCover } from './BookCover';
+import { useTheme } from '../utils/ThemeContext';
 
 interface RecentlyOpenedProps {
   books: Book[];
@@ -13,16 +14,19 @@ export const RecentlyOpened: React.FC<RecentlyOpenedProps> = ({
   onSelectBook,
   onSeeAll,
 }) => {
+  const { theme, isDark } = useTheme();
+
   return (
     <section className="mt-5">
       <div className="flex items-center justify-between mb-3 px-0.5">
-        <h2 className="text-[17px] font-bold text-stone-900 tracking-tight">
+        <h2 className="text-[17px] font-bold tracking-tight" style={{ color: theme.textPrimary }}>
           Recently Opened
         </h2>
         <button
           type="button"
           onClick={onSeeAll}
-          className="text-xs font-semibold text-[#154D43] hover:text-[#0C322B] transition-colors py-1 cursor-pointer"
+          className="text-xs font-semibold transition-colors py-1 cursor-pointer"
+          style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
         >
           See all
         </button>
@@ -39,13 +43,16 @@ export const RecentlyOpened: React.FC<RecentlyOpenedProps> = ({
               <BookCover book={book} size="md" />
             </div>
             <div className="text-left leading-tight">
-              <h4 className="font-semibold text-stone-900 text-[13px] tracking-tight truncate group-hover:text-[#154D43] transition-colors">
+              <h4
+                className="font-semibold text-[13px] tracking-tight truncate transition-colors"
+                style={{ color: theme.textPrimary }}
+              >
                 {book.fileName || book.title}
               </h4>
-              <p className="text-stone-500 text-[11px] truncate mt-0.5">
+              <p className="text-[11px] truncate mt-0.5" style={{ color: theme.textSecondary }}>
                 {book.totalPages ? `${book.totalPages} pages` : book.author}
               </p>
-              <p className="text-stone-400 text-[10px] mt-0.5 font-medium">
+              <p className="text-[10px] mt-0.5 font-medium" style={{ color: theme.textMuted }}>
                 {book.fileType} • {book.fileSize}
               </p>
             </div>

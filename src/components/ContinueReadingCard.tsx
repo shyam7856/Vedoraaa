@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronRight, Play } from 'lucide-react';
 import { Book } from '../types';
 import { BookCover } from './BookCover';
+import { useTheme } from '../utils/ThemeContext';
 
 interface ContinueReadingCardProps {
   book: Book;
@@ -14,18 +15,28 @@ export const ContinueReadingCard: React.FC<ContinueReadingCardProps> = ({
   onOpenReader,
   onOpenDetails,
 }) => {
+  const { theme } = useTheme();
+
   return (
     <div
       onClick={() => onOpenDetails(book)}
-      className="bg-[#154D43] text-white rounded-[26px] p-4 sm:p-5 shadow-sm shadow-[#154D43]/20 relative overflow-hidden cursor-pointer transition-all hover:shadow-md hover:shadow-[#154D43]/30 active:scale-[0.99] group"
+      className="text-white rounded-[26px] p-4 sm:p-5 shadow-sm relative overflow-hidden cursor-pointer transition-all hover:shadow-md active:scale-[0.99] group"
+      style={{
+        backgroundColor: theme.brandPrimary,
+        boxShadow: `0 8px 24px -4px ${theme.brandPrimary}40`,
+      }}
     >
-      <div className="absolute -right-8 -top-8 w-40 h-40 bg-teal-400/10 rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -left-10 -bottom-10 w-36 h-36 bg-black/15 rounded-full blur-xl pointer-events-none" />
+      {/* Subtle organic light reflections */}
+      <div
+        className="absolute -right-8 -top-8 w-40 h-40 rounded-full blur-2xl pointer-events-none opacity-20"
+        style={{ backgroundColor: theme.mutedAccent }}
+      />
+      <div className="absolute -left-10 -bottom-10 w-36 h-36 bg-black/25 rounded-full blur-xl pointer-events-none" />
 
       <div className="flex items-center justify-between relative z-10 mb-3">
-        <div className="flex items-center gap-1 text-teal-200/90 text-[12px] font-medium tracking-wide">
+        <div className="flex items-center gap-1 text-[12px] font-medium tracking-wide text-white/90">
           <span>Continue Reading</span>
-          <ChevronRight className="w-3.5 h-3.5 text-teal-300/70 stroke-[2.5]" />
+          <ChevronRight className="w-3.5 h-3.5 text-white/70 stroke-[2.5]" />
         </div>
       </div>
 
@@ -37,17 +48,20 @@ export const ContinueReadingCard: React.FC<ContinueReadingCardProps> = ({
           <h3 className="font-bold text-white text-[15px] sm:text-[16px] leading-[1.25] tracking-tight truncate">
             {book.fileName || book.title}
           </h3>
-          <p className="text-teal-200/75 text-xs font-normal mt-0.5 truncate">
+          <p className="text-white/75 text-xs font-normal mt-0.5 truncate">
             {book.totalPages ? `${book.totalPages} pages • PDF` : book.author}
           </p>
           <div className="mt-3 flex items-center gap-2.5">
-            <div className="flex-1 h-1.5 bg-[#0C322B] rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#5EEAD4] rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${book.progress}%` }}
+                className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${book.progress}%`,
+                  backgroundColor: theme.mutedAccent,
+                }}
               />
             </div>
-            <span className="text-teal-200/90 text-[11px] font-semibold tabular-nums shrink-0">
+            <span className="text-white/90 text-[11px] font-semibold tabular-nums shrink-0">
               {book.progress}%
             </span>
           </div>
@@ -59,9 +73,10 @@ export const ContinueReadingCard: React.FC<ContinueReadingCardProps> = ({
             onOpenReader(book);
           }}
           aria-label={`Resume reading ${book.title}`}
-          className="w-11 h-11 rounded-full bg-white text-[#154D43] flex items-center justify-center shrink-0 shadow-md shadow-black/15 hover:scale-105 active:scale-95 transition-transform cursor-pointer group-hover:bg-teal-50"
+          className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0 shadow-md shadow-black/20 hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+          style={{ color: theme.brandPrimary }}
         >
-          <Play className="w-4 h-4 fill-[#154D43] ml-0.5" />
+          <Play className="w-4 h-4 fill-current ml-0.5" />
         </button>
       </div>
     </div>

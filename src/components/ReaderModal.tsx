@@ -126,16 +126,102 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [zoomScale, setZoomScale] = useState<number>(1.0);
   const [rotation, setRotation] = useState<number>(0);
 
+  // Brightness setting (persisted and native bridge)
+  const [brightness, setBrightness] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('vedora_reader_brightness');
+      if (saved) return parseInt(saved, 10);
+    } catch {}
+    return 100;
+  });
+
+  const handleUpdateBrightness = (newBrightness: number) => {
+    setBrightness(newBrightness);
+    try {
+      localStorage.setItem('vedora_reader_brightness', String(newBrightness));
+      (window as any).VedoraNative?.setBrightness(newBrightness / 100);
+    } catch {}
+  };
+
+  // Font size setting for reflowable content & annotations
+  const [fontSizePercent, setFontSizePercent] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('vedora_reader_font_size');
+      if (saved) return parseInt(saved, 10);
+    } catch {}
+    return 100;
+  });
+
+  const handleUpdateFontSize = (pct: number) => {
+    setFontSizePercent(pct);
+    try {
+      localStorage.setItem('vedora_reader_font_size', String(pct));
+    } catch {}
+  };
+
+  // Page numbers visibility toggle
+  const [showPageNumbers, setShowPageNumbers] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('vedora_reader_show_page_num');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true;
+  });
+
+  const handleTogglePageNumbers = () => {
+    setShowPageNumbers((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('vedora_reader_show_page_num', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Keep screen on
+  const [keepScreenOn, setKeepScreenOn] = useState<boolean>(false);
+  const handleToggleKeepScreenOn = () => {
+    setKeepScreenOn((prev) => {
+      const next = !prev;
+      try {
+        (window as any).VedoraNative?.setKeepScreenOn(next);
+        if (next && 'wakeLock' in navigator) {
+          (navigator as any).wakeLock?.request('screen').catch(() => {});
+        }
+      } catch {}
+      return next;
+    });
+  };
+
+  // In-document search
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [activeSearchMatch, setActiveSearchMatch] = useState<SearchMatchItem | null>(null);
+
+  // Android Back Button handler registration for Reader
+  useEffect(() => {
+    (window as any).__vedoraReaderBackHandler = () => {
+      if (activeDrawer !== null) {
+        setActiveDrawer(null);
+        return true;
+      }
+      if (isSearchOpen) {
+        setIsSearchOpen(false);
+        setActiveSearchMatch(null);
+        return true;
+      }
+      return false; // let App.tsx close ReaderModal cleanly
+    };
+    return () => {
+      delete (window as any).__vedoraReaderBackHandler;
+    };
+  }, [activeDrawer, isSearchOpen]);
+
   const handleUpdateViewMode = (newMode: ReaderViewMode) => {
     setViewMode(newMode);
     try {
       localStorage.setItem('vedora_reader_view_mode', newMode);
     } catch {}
   };
-
-  // In-document search
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  const [activeSearchMatch, setActiveSearchMatch] = useState<SearchMatchItem | null>(null);
 
   // Note attachment from selection
   const [attachedSelectionForNote, setAttachedSelectionForNote] = useState<{
@@ -333,6 +419,17 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     [book.id]
   );
 
+  const handleUpdateHighlight = useCallback(
+    (updated: HighlightItem) => {
+      setHighlights((prev) => {
+        const next = prev.map((h) => (h.id === updated.id ? updated : h));
+        saveDocHighlights(book.id, next);
+        return next;
+      });
+    },
+    [book.id]
+  );
+
   // Notes save handler
   const handleSaveNotes = useCallback(
     (updatedNotes: NoteItem[]) => {
@@ -404,6 +501,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     <div
       className={`fixed inset-0 z-50 flex flex-col justify-between select-none animate-in fade-in duration-150 ${readerBgClass} ${fontClass}`}
     >
+      {/* Brightness Dimming Overlay for Night/Comfort Reading */}
+      {brightness < 100 && (
+        <div
+          className="fixed inset-0 pointer-events-none z-45 bg-black transition-opacity duration-150"
+          style={{ opacity: Math.max(0, Math.min(0.7, (100 - brightness) * 0.007)) }}
+        />
+      )}
+
       {/* Toast Alert */}
       {toastMessage && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 bg-[#302C26]/90 text-[#FBF8F1] text-xs font-medium py-1.5 px-4 rounded-full shadow-lg backdrop-blur-xs flex items-center gap-1.5 animate-in fade-in zoom-in-95">
@@ -444,40 +549,19 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           </button>
         </div>
 
-        {/* Center Title and Mode Switcher */}
+        {/* Center Title and Compact Mode Indicator (Requirement 7) */}
         <div className="text-center px-2 flex-1 min-w-0 max-w-[280px]">
           <h3 className="font-serif-display font-semibold text-xs sm:text-sm tracking-tight truncate">
             {book.fileName || book.title}
           </h3>
-          <div className="flex items-center justify-center gap-1.5 mt-0.5">
-            {/* Quick Mode Toggle Pill: Continuous Scroll vs Single Page */}
-            <button
-              type="button"
-              onClick={() => {
-                const nextMode: ReaderViewMode =
-                  viewMode === 'continuous' ? 'single' : 'continuous';
-                handleUpdateViewMode(nextMode);
-                showToast(
-                  nextMode === 'continuous'
-                    ? 'Switched to Continuous Scroll'
-                    : 'Switched to Single Page'
-                );
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-sans font-medium border border-[#E4DCCE] dark:border-zinc-700 bg-black/5 dark:bg-white/5 hover:bg-black/10 transition-colors cursor-pointer"
-              title="Click to toggle between Continuous Scroll and Single Page"
-            >
-              {viewMode === 'continuous' ? (
-                <ScrollText className="w-2.5 h-2.5 text-[#154D43] dark:text-teal-400" />
-              ) : (
-                <FileText className="w-2.5 h-2.5 text-[#154D43] dark:text-teal-400" />
-              )}
-              <span>
-                {viewMode === 'continuous' ? 'Continuous Scroll' : 'Single Page'}
-              </span>
-            </button>
-            <span className="text-[10px] text-[#777064] dark:text-zinc-400 tabular-nums">
-              p. {currentPage}/{totalPages}
-            </span>
+          <div className="flex items-center justify-center gap-1.5 mt-0.5 text-[10px] text-[#777064] dark:text-zinc-400 font-sans tabular-nums">
+            <span className="capitalize">{viewMode === 'continuous' ? 'Continuous Scroll' : 'Single Page'}</span>
+            {showPageNumbers && (
+              <>
+                <span>•</span>
+                <span>Page {currentPage} of {totalPages}</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -569,12 +653,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             initialPage={book.currentPage || 1}
             currentPage={currentPage}
             zoomScale={zoomScale}
+            onChangeZoom={setZoomScale}
             rotation={rotation}
             theme={theme}
             viewMode={viewMode}
             onPageChange={handlePageChange}
             highlights={highlights}
             onAddHighlight={handleAddHighlight}
+            onUpdateHighlight={handleUpdateHighlight}
             onDeleteHighlight={handleDeleteHighlight}
             onShowToast={showToast}
             scrollToPageTarget={scrollToPageTarget}
@@ -663,8 +749,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         </div>
       </footer>
 
-      {/* 1. CONTENTS DRAWER */}
+      {/* 1. CONTENTS DRAWER with instant cached lookup */}
       <ContentsDrawer
+        documentId={book.id}
         pdfDoc={pdfDoc}
         totalPages={totalPages}
         currentPage={currentPage}
@@ -689,7 +776,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         theme={theme}
       />
 
-      {/* 3. APPEARANCE DRAWER */}
+      {/* 3. READING SETTINGS & APPEARANCE DRAWER (Requirement 6) */}
       <AppearanceDrawer
         isOpen={activeDrawer === 'appearance'}
         onClose={() => setActiveDrawer(null)}
@@ -701,6 +788,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         onChangeViewMode={handleUpdateViewMode}
         fontFamily={fontFamily}
         onChangeFont={handleUpdateFont}
+        brightness={brightness}
+        onChangeBrightness={handleUpdateBrightness}
+        fontSizePercent={fontSizePercent}
+        onChangeFontSize={handleUpdateFontSize}
+        showPageNumbers={showPageNumbers}
+        onTogglePageNumbers={handleTogglePageNumbers}
+        keepScreenOn={keepScreenOn}
+        onToggleKeepScreenOn={handleToggleKeepScreenOn}
       />
 
       {/* 4. NOTE DRAWER */}

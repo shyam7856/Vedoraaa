@@ -10,7 +10,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.ConsoleMessage
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -35,8 +37,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import java.io.InputStream
+
+class VedoraNativeBridge(private val activity: Activity?) {
+  @JavascriptInterface
+  fun setBrightness(level: Float) {
+    activity?.runOnUiThread {
+      val window = activity.window ?: return@runOnUiThread
+      val lp = window.attributes
+      lp.screenBrightness = if (level < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else level.coerceIn(0.1f, 1.0f)
+      window.attributes = lp
+    }
+  }
+
+  @JavascriptInterface
+  fun setKeepScreenOn(keepOn: Boolean) {
+    activity?.runOnUiThread {
+      val window = activity.window ?: return@runOnUiThread
+      if (keepOn) {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+      } else {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+      }
+    }
+  }
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -116,9 +143,25 @@ fun VedoraHost(
 ) {
   var webViewInstance by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
+  val context = LocalContext.current
+  val activity = context as? Activity
 
-  BackHandler(enabled = canGoBack) {
-    webViewInstance?.goBack()
+  BackHandler(enabled = true) {
+    val wv = webViewInstance
+    if (wv != null) {
+      wv.evaluateJavascript("typeof window.handleAndroidBack === 'function' ? window.handleAndroidBack() : false") { result ->
+        val handled = result?.trim()?.trim('"') == "true"
+        if (!handled) {
+          if (wv.canGoBack()) {
+            wv.goBack()
+          } else {
+            activity?.finish()
+          }
+        }
+      }
+    } else {
+      activity?.finish()
+    }
   }
 
   Box(
@@ -129,8 +172,9 @@ fun VedoraHost(
   ) {
     AndroidView(
       modifier = Modifier.fillMaxSize(),
-      factory = { context ->
-        WebView(context).apply {
+      factory = { ctx ->
+        WebView(ctx).apply {
+          addJavascriptInterface(VedoraNativeBridge(activity), "VedoraNative")
           layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT

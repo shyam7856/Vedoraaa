@@ -1,52 +1,73 @@
 import React from 'react';
 import { X, Bell, Check, Clock, Sparkles } from 'lucide-react';
+import { useTheme } from '../utils/ThemeContext';
 
 interface NotificationsModalProps {
   onClose: () => void;
 }
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose }) => {
+  const { theme, isDark } = useTheme();
+
   const notifications = [
     {
       id: 1,
       title: 'Daily Reading Goal Met!',
-      desc: 'You completed 45 minutes of reading today in The Psychology of Money.',
+      desc: 'You completed your daily reading target in your active PDF library.',
       time: '1 hour ago',
       icon: Sparkles,
-      color: 'text-amber-500 bg-amber-50',
+      iconColor: '#F59E0B',
+      bgColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7',
     },
     {
       id: 2,
-      title: 'Highlights Synced',
-      desc: '82 highlights and 18 personal notes backed up successfully.',
+      title: 'Highlights & Notes Saved',
+      desc: 'Your annotations, bookmarks, and quotes are securely stored in your local reader.',
       time: '3 hours ago',
       icon: Check,
-      color: 'text-emerald-500 bg-emerald-50',
+      iconColor: '#10B981',
+      bgColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#D1FAE5',
     },
     {
       id: 3,
       title: 'Reading Reminder',
-      desc: 'Pick up where you left off on Page 132 of The Psychology of Money.',
+      desc: 'Continue reading your open documents where you last left off.',
       time: 'Yesterday',
       icon: Clock,
-      color: 'text-teal-600 bg-teal-50',
+      iconColor: isDark ? theme.mutedAccent : theme.brandPrimary,
+      bgColor: isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`,
     },
   ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-200">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-[#FAF8F5] rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl border-t sm:border border-stone-200/80 z-10 max-h-[85vh] overflow-y-auto select-none">
-        <div className="w-12 h-1 bg-stone-300 rounded-full mx-auto mb-4 sm:hidden" />
-        <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+      <div
+        className="relative w-full max-w-sm rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl border-t sm:border z-10 max-h-[85vh] overflow-y-auto select-none"
+        style={{
+          backgroundColor: theme.bg,
+          color: theme.textPrimary,
+          borderColor: theme.cardBorder,
+        }}
+      >
+        <div
+          className="w-12 h-1 rounded-full mx-auto mb-4 sm:hidden"
+          style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' }}
+        />
+        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: theme.cardBorder }}>
           <div className="flex items-center gap-2">
-            <Bell className="w-5 h-5 text-[#154D43]" />
-            <h3 className="font-bold text-stone-900 text-base">Notifications</h3>
+            <Bell className="w-5 h-5" style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }} />
+            <h3 className="font-bold text-base" style={{ color: theme.textPrimary }}>Notifications</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200/60 hover:bg-stone-300 flex items-center justify-center text-stone-600 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+            style={{
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+              color: theme.textPrimary,
+            }}
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -57,15 +78,25 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose 
             return (
               <div
                 key={n.id}
-                className="p-3.5 bg-[#F2EFE9] rounded-2xl flex items-start gap-3 hover:bg-stone-200/60 transition-colors"
+                className="p-3.5 rounded-2xl flex items-start gap-3 transition-colors border"
+                style={{
+                  backgroundColor: theme.cardBg,
+                  borderColor: theme.cardBorder,
+                }}
               >
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${n.color}`}>
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                  style={{
+                    backgroundColor: n.bgColor,
+                    color: n.iconColor,
+                  }}
+                >
                   <Icon className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-semibold text-stone-900">{n.title}</h4>
-                  <p className="text-[11px] text-stone-600 mt-0.5 leading-snug">{n.desc}</p>
-                  <span className="text-[10px] text-stone-400 mt-1 block">{n.time}</span>
+                  <h4 className="text-xs font-semibold" style={{ color: theme.textPrimary }}>{n.title}</h4>
+                  <p className="text-[11px] mt-0.5 leading-snug" style={{ color: theme.textSecondary }}>{n.desc}</p>
+                  <span className="text-[10px] mt-1 block" style={{ color: theme.textMuted }}>{n.time}</span>
                 </div>
               </div>
             );

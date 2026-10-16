@@ -29,8 +29,10 @@ import {
   deleteDocHighlight,
   deleteDocNote,
 } from './utils/libraryDb';
+import { useTheme } from './utils/ThemeContext';
 
 export default function App() {
+  const { theme, isDark } = useTheme();
   const [importedDocuments, setImportedDocuments] = useState<ImportedDocument[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<GenreType | null>(null);
@@ -204,6 +206,55 @@ export default function App() {
     }
   };
 
+  // Android System Back Navigation (Requirement 3)
+  useEffect(() => {
+    (window as any).handleAndroidBack = () => {
+      // 1. If Reader is open and has an active drawer/search/highlight modal
+      if (typeof (window as any).__vedoraReaderBackHandler === 'function') {
+        const readerHandled = (window as any).__vedoraReaderBackHandler();
+        if (readerHandled) return true;
+      }
+
+      // 2. If Reader modal is open, close reader and return to library/home
+      if (readingBook !== null) {
+        setReadingBook(null);
+        refreshDocuments();
+        return true;
+      }
+
+      // 3. If any secondary dialog or detail sheet is open
+      if (typeof (window as any).__vedoraProfileBackHandler === 'function') {
+        const profileHandled = (window as any).__vedoraProfileBackHandler();
+        if (profileHandled) return true;
+      }
+      if (selectedBookForDetails !== null) {
+        setSelectedBookForDetails(null);
+        return true;
+      }
+      if (isProfileOpen) {
+        setIsProfileOpen(false);
+        return true;
+      }
+      if (isNotificationsOpen) {
+        setIsNotificationsOpen(false);
+        return true;
+      }
+
+      // 4. If on secondary tab (library, notes, community), return to home tab
+      if (activeTab !== 'home') {
+        setActiveTab('home');
+        return true;
+      }
+
+      // 5. App can exit
+      return false;
+    };
+
+    return () => {
+      delete (window as any).handleAndroidBack;
+    };
+  }, [readingBook, selectedBookForDetails, isProfileOpen, isNotificationsOpen, activeTab, refreshDocuments]);
+
   // Tab switching
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -233,10 +284,13 @@ export default function App() {
                 {/* Header Bar */}
                 <header className="flex items-center justify-between pt-1 pb-3">
                   <div>
-                    <h1 className="font-serif-display font-bold text-[28px] text-stone-900 tracking-tight leading-none">
+                    <h1
+                      className="font-serif-display font-bold text-[28px] tracking-tight leading-none"
+                      style={{ color: theme.textPrimary }}
+                    >
                       VEDORA
                     </h1>
-                    <p className="text-stone-500 text-[13px] font-normal mt-1 tracking-normal">
+                    <p className="text-[13px] font-normal mt-1 tracking-normal" style={{ color: theme.textSecondary }}>
                       Your reading space
                     </p>
                   </div>
@@ -244,16 +298,23 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsNotificationsOpen(true)}
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-stone-800 hover:bg-stone-200/60 active:scale-95 transition-all cursor-pointer relative"
+                      className="w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all cursor-pointer relative"
+                      style={{
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                        color: theme.textPrimary,
+                      }}
                       aria-label="Notifications"
                     >
                       <Bell className="w-[20px] h-[20px] stroke-[1.9]" />
-                      <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-[#FAF8F5]" />
+                      <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-[#FAF8F5] dark:ring-zinc-900" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsProfileOpen(true)}
-                      className="w-9 h-9 rounded-full bg-[#154D43] hover:bg-[#0E3A32] text-white font-bold text-sm flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer font-serif-display"
+                      className="w-9 h-9 rounded-full text-white font-bold text-sm flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer font-serif-display"
+                      style={{
+                        backgroundColor: isDark ? theme.secondary : theme.brandPrimary,
+                      }}
                       aria-label="Profile"
                     >
                       V
@@ -263,20 +324,28 @@ export default function App() {
 
                 {/* Search Bar */}
                 <div className="mt-2.5 relative">
-                  <div className="w-full bg-[#EFEFEA] hover:bg-[#EBEBE5] focus-within:bg-[#E8E8E1] focus-within:ring-2 focus-within:ring-[#154D43]/20 rounded-2xl px-3.5 py-2.5 flex items-center gap-2.5 transition-all">
-                    <Search className="w-[18px] h-[18px] text-stone-400 shrink-0" />
+                  <div
+                    className="w-full rounded-2xl px-3.5 py-2.5 flex items-center gap-2.5 transition-all border"
+                    style={{
+                      backgroundColor: theme.inputBg,
+                      borderColor: theme.cardBorder,
+                    }}
+                  >
+                    <Search className="w-[18px] h-[18px] shrink-0" style={{ color: theme.textMuted }} />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search your library..."
-                      className="w-full bg-transparent text-stone-900 placeholder:text-stone-400 text-[14px] outline-none font-normal"
+                      className="w-full bg-transparent text-[14px] outline-none font-normal"
+                      style={{ color: theme.textPrimary }}
                     />
                     {searchQuery && (
                       <button
                         type="button"
                         onClick={() => setSearchQuery('')}
-                        className="p-1 rounded-full text-stone-400 hover:text-stone-700 cursor-pointer"
+                        className="p-1 rounded-full cursor-pointer"
+                        style={{ color: theme.textMuted }}
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -287,11 +356,15 @@ export default function App() {
                 {/* Active Filter Chips */}
                 {(activeShortcut || searchQuery) && (
                   <div className="flex items-center gap-1.5 mt-3 overflow-x-auto no-scrollbar py-0.5">
-                    <span className="text-[11px] text-stone-500 font-medium">Filtered by:</span>
+                    <span className="text-[11px] font-medium" style={{ color: theme.textSecondary }}>Filtered by:</span>
                     {activeShortcut && (
                       <button
                         onClick={() => setActiveShortcut(null)}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium bg-stone-200 text-stone-800 px-2 py-0.5 rounded-full cursor-pointer hover:bg-stone-300"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full cursor-pointer"
+                        style={{
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                          color: theme.textPrimary,
+                        }}
                       >
                         <span className="capitalize">{activeShortcut}</span>
                         <X className="w-3 h-3" />
@@ -300,7 +373,11 @@ export default function App() {
                     {searchQuery && (
                       <button
                         onClick={() => setSearchQuery('')}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium bg-stone-200 text-stone-800 px-2 py-0.5 rounded-full cursor-pointer hover:bg-stone-300"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full cursor-pointer"
+                        style={{
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                          color: theme.textPrimary,
+                        }}
                       >
                         <span>"{searchQuery}"</span>
                         <X className="w-3 h-3" />
@@ -311,7 +388,8 @@ export default function App() {
                         setActiveShortcut(null);
                         setSearchQuery('');
                       }}
-                      className="text-[10px] text-[#154D43] font-semibold hover:underline ml-1 cursor-pointer"
+                      className="text-[10px] font-semibold hover:underline ml-1 cursor-pointer"
+                      style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                     >
                       Reset
                     </button>
@@ -328,21 +406,28 @@ export default function App() {
                     />
                   </div>
                 ) : (
-                  <div className="mt-4 p-5 rounded-[26px] bg-[#154D43] text-white shadow-sm flex flex-col items-start relative overflow-hidden">
-                    <div className="flex items-center gap-2 text-teal-200 text-xs font-medium mb-1">
-                      <BookOpen className="w-4 h-4 text-teal-300" />
+                  <div
+                    className="mt-4 p-5 rounded-[26px] text-white shadow-sm flex flex-col items-start relative overflow-hidden"
+                    style={{
+                      backgroundColor: theme.brandPrimary,
+                      boxShadow: `0 8px 24px -4px ${theme.brandPrimary}40`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-medium mb-1 text-white/80">
+                      <BookOpen className="w-4 h-4 text-white/90" />
                       <span>Welcome to VEDORA</span>
                     </div>
                     <h3 className="font-serif-display font-bold text-lg text-white mt-1">
                       Your reading space is ready
                     </h3>
-                    <p className="text-teal-100/80 text-xs mt-1 leading-relaxed max-w-[280px]">
+                    <p className="text-white/75 text-xs mt-1 leading-relaxed max-w-[280px]">
                       Import your PDF books, articles, or research papers to read, highlight, and take notes.
                     </p>
                     <button
                       type="button"
                       onClick={() => setActiveTab('library')}
-                      className="mt-4 px-4 py-2 bg-white text-[#154D43] text-xs font-bold rounded-xl shadow-xs hover:bg-teal-50 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                      className="mt-4 px-4 py-2 bg-white text-xs font-bold rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                      style={{ color: theme.brandPrimary }}
                     >
                       <Plus className="w-4 h-4 stroke-[2.5]" />
                       <span>Open Library to Import</span>
@@ -395,10 +480,10 @@ export default function App() {
               <div>
                 <header className="flex items-center justify-between pt-1 pb-3">
                   <div>
-                    <h1 className="font-serif-display font-bold text-[28px] text-stone-900 tracking-tight leading-none">
+                    <h1 className="font-serif-display font-bold text-[28px] tracking-tight leading-none" style={{ color: theme.textPrimary }}>
                       Notes & Highlights
                     </h1>
-                    <p className="text-stone-500 text-[13px] font-normal mt-1 tabular-nums">
+                    <p className="text-[13px] font-normal mt-1 tabular-nums" style={{ color: theme.textSecondary }}>
                       {allNotes.length} notes • {allHighlights.length} highlights • {allBookmarks.length} bookmarks
                     </p>
                   </div>
@@ -411,20 +496,29 @@ export default function App() {
                     { id: 'highlights', label: `Highlights (${allHighlights.length})` },
                     { id: 'notes', label: `Notes (${allNotes.length})` },
                     { id: 'bookmarks', label: `Bookmarks (${allBookmarks.length})` },
-                  ].map((pill) => (
-                    <button
-                      key={pill.id}
-                      type="button"
-                      onClick={() => setNotesFilter(pill.id as any)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-                        notesFilter === pill.id
-                          ? 'bg-[#154D43] text-white shadow-2xs font-semibold'
-                          : 'bg-[#EFEFEA] text-stone-600 hover:bg-[#E5E5DF]'
-                      }`}
-                    >
-                      {pill.label}
-                    </button>
-                  ))}
+                  ].map((pill) => {
+                    const isSelected = notesFilter === pill.id;
+                    return (
+                      <button
+                        key={pill.id}
+                        type="button"
+                        onClick={() => setNotesFilter(pill.id as any)}
+                        className="px-3 py-1 rounded-full text-xs transition-colors cursor-pointer shrink-0 border"
+                        style={{
+                          backgroundColor: isSelected
+                            ? isDark ? theme.secondary : theme.brandPrimary
+                            : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+                          color: isSelected ? '#FFFFFF' : theme.textSecondary,
+                          borderColor: isSelected
+                            ? isDark ? theme.mutedAccent : theme.brandPrimary
+                            : theme.cardBorder,
+                          fontWeight: isSelected ? 600 : 500,
+                        }}
+                      >
+                        {pill.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* List of Annotations */}
@@ -433,10 +527,20 @@ export default function App() {
                     allHighlights.map((hl) => (
                       <div
                         key={hl.id}
-                        className="p-3.5 bg-white border border-stone-200/80 rounded-2xl shadow-2xs hover:shadow-xs transition-shadow group"
+                        className="p-3.5 rounded-2xl shadow-2xs hover:shadow-xs transition-shadow group border"
+                        style={{
+                          backgroundColor: theme.cardBg,
+                          borderColor: theme.cardBorder,
+                        }}
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#154D43] bg-teal-50 px-2 py-0.5 rounded-full">
+                          <span
+                            className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`,
+                              color: isDark ? theme.mutedAccent : theme.brandPrimary,
+                            }}
+                          >
                             Highlight
                           </span>
                           <button
@@ -446,31 +550,37 @@ export default function App() {
                               refreshDocuments();
                               showToast('Deleted highlight');
                             }}
-                            className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                            className="p-1 cursor-pointer transition-colors"
+                            style={{ color: theme.textMuted }}
                             title="Delete highlight"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <p
-                          className="text-xs font-medium text-stone-900 leading-relaxed p-2.5 rounded-xl border-l-3 border-[#154D43]"
-                          style={{ backgroundColor: `${hl.colorHex || '#FEF08A'}55` }}
+                          className="text-xs font-medium leading-relaxed p-2.5 rounded-xl border-l-3"
+                          style={{
+                            backgroundColor: `${hl.colorHex || '#FEF08A'}45`,
+                            borderLeftColor: isDark ? theme.mutedAccent : theme.brandPrimary,
+                            color: isDark ? '#F4F2EC' : '#1F1D1A',
+                          }}
                         >
                           “{hl.text}”
                         </p>
                         {hl.note && (
-                          <p className="text-[11px] text-stone-600 mt-1.5 px-1 italic">
+                          <p className="text-[11px] mt-1.5 px-1 italic" style={{ color: theme.textSecondary }}>
                             Note: {hl.note}
                           </p>
                         )}
-                        <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 px-1">
-                          <span className="font-medium text-stone-600 truncate max-w-[200px]">
+                        <div className="flex items-center justify-between text-[11px] mt-2 px-1">
+                          <span className="font-medium truncate max-w-[200px]" style={{ color: theme.textSecondary }}>
                             Page {hl.page} • {hl.documentName}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleOpenHighlightInReader(hl)}
-                            className="text-[#154D43] font-bold hover:underline cursor-pointer"
+                            className="font-bold hover:underline cursor-pointer"
+                            style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                           >
                             Jump to Page →
                           </button>
@@ -482,14 +592,24 @@ export default function App() {
                     allNotes.map((note) => (
                       <div
                         key={note.id}
-                        className="p-3.5 bg-white border border-stone-200/80 rounded-2xl shadow-2xs hover:shadow-xs transition-shadow group"
+                        className="p-3.5 rounded-2xl shadow-2xs hover:shadow-xs transition-shadow group border"
+                        style={{
+                          backgroundColor: theme.cardBg,
+                          borderColor: theme.cardBorder,
+                        }}
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                          <span
+                            className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7',
+                              color: isDark ? '#FCD34D' : '#B45309',
+                            }}
+                          >
                             Note
                           </span>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-stone-400">
+                            <span className="text-[10px]" style={{ color: theme.textMuted }}>
                               {new Date(note.createdAt).toLocaleDateString()}
                             </span>
                             <button
@@ -499,7 +619,8 @@ export default function App() {
                                 refreshDocuments();
                                 showToast('Deleted note');
                               }}
-                              className="text-stone-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                              className="p-1 cursor-pointer transition-colors"
+                              style={{ color: theme.textMuted }}
                               title="Delete note"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -507,15 +628,25 @@ export default function App() {
                           </div>
                         </div>
                         {note.selectedText && (
-                          <div className="mb-2 p-2 rounded-xl bg-stone-50 border-l-2 border-[#154D43] text-[11px] italic text-stone-700">
+                          <div
+                            className="mb-2 p-2 rounded-xl border-l-2 text-[11px] italic"
+                            style={{
+                              backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                              borderLeftColor: isDark ? theme.mutedAccent : theme.brandPrimary,
+                              color: theme.textSecondary,
+                            }}
+                          >
                             “{note.selectedText}”
                           </div>
                         )}
-                        <p className="text-xs font-medium text-stone-900 leading-relaxed px-1 whitespace-pre-wrap">
+                        <p className="text-xs font-medium leading-relaxed px-1 whitespace-pre-wrap" style={{ color: theme.textPrimary }}>
                           {note.content}
                         </p>
-                        <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2.5 px-1 pt-1 border-t border-stone-100">
-                          <span className="font-medium text-stone-600 truncate max-w-[200px]">
+                        <div
+                          className="flex items-center justify-between text-[11px] mt-2.5 px-1 pt-1 border-t"
+                          style={{ borderColor: theme.cardBorder }}
+                        >
+                          <span className="font-medium truncate max-w-[200px]" style={{ color: theme.textSecondary }}>
                             Page {note.page} • {note.documentName}
                           </span>
                           <button
@@ -527,7 +658,8 @@ export default function App() {
                                 documentName: note.documentName,
                               })
                             }
-                            className="text-[#154D43] font-bold hover:underline cursor-pointer"
+                            className="font-bold hover:underline cursor-pointer"
+                            style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                           >
                             Jump to Page →
                           </button>
@@ -539,17 +671,27 @@ export default function App() {
                     allBookmarks.map((bm) => (
                       <div
                         key={bm.id}
-                        className="p-3.5 bg-white border border-stone-200/80 rounded-2xl shadow-2xs hover:shadow-xs transition-shadow group flex items-center justify-between"
+                        className="p-3.5 rounded-2xl shadow-2xs hover:shadow-xs transition-shadow group flex items-center justify-between border"
+                        style={{
+                          backgroundColor: theme.cardBg,
+                          borderColor: theme.cardBorder,
+                        }}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#154D43] flex items-center justify-center font-bold text-xs">
+                          <div
+                            className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs"
+                            style={{
+                              backgroundColor: isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`,
+                              color: isDark ? theme.mutedAccent : theme.brandPrimary,
+                            }}
+                          >
                             p.{bm.page}
                           </div>
                           <div>
-                            <div className="text-xs font-semibold text-stone-900 truncate max-w-[200px]">
+                            <div className="text-xs font-semibold truncate max-w-[200px]" style={{ color: theme.textPrimary }}>
                               {bm.documentName}
                             </div>
-                            <div className="text-[11px] text-stone-500">
+                            <div className="text-[11px]" style={{ color: theme.textSecondary }}>
                               Bookmarked Page {bm.page}
                             </div>
                           </div>
@@ -563,7 +705,8 @@ export default function App() {
                               documentName: bm.documentName,
                             })
                           }
-                          className="text-[#154D43] font-bold text-xs hover:underline cursor-pointer"
+                          className="font-bold text-xs hover:underline cursor-pointer"
+                          style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                         >
                           Jump →
                         </button>
@@ -577,14 +720,23 @@ export default function App() {
                     (notesFilter === 'highlights' && allHighlights.length === 0) ||
                     (notesFilter === 'notes' && allNotes.length === 0) ||
                     (notesFilter === 'bookmarks' && allBookmarks.length === 0)) && (
-                    <div className="text-center py-12 bg-white rounded-3xl border border-stone-200/80 p-6">
-                      <div className="w-10 h-10 rounded-2xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto mb-2">
+                    <div
+                      className="text-center py-12 rounded-3xl border p-6"
+                      style={{
+                        backgroundColor: theme.cardBg,
+                        borderColor: theme.cardBorder,
+                      }}
+                    >
+                      <div
+                        className="w-10 h-10 rounded-2xl flex items-center justify-center mx-auto mb-2"
+                        style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }}
+                      >
                         <Sparkles className="w-5 h-5 text-amber-500" />
                       </div>
-                      <h4 className="text-xs font-bold text-stone-800">
+                      <h4 className="text-xs font-bold" style={{ color: theme.textPrimary }}>
                         No {notesFilter === 'all' ? 'annotations' : notesFilter} yet
                       </h4>
-                      <p className="text-[11px] text-stone-500 mt-1 max-w-[220px] mx-auto">
+                      <p className="text-[11px] mt-1 max-w-[220px] mx-auto" style={{ color: theme.textSecondary }}>
                         Open any PDF document to highlight passages, bookmark pages, and write notes.
                       </p>
                     </div>
@@ -599,21 +751,33 @@ export default function App() {
             <div className="flex-1 px-5 pt-3 pb-6 flex flex-col animate-in fade-in duration-150">
               <div>
                 <header className="pt-1 pb-3">
-                  <h1 className="font-serif-display font-bold text-[28px] text-stone-900 tracking-tight leading-none">
+                  <h1 className="font-serif-display font-bold text-[28px] tracking-tight leading-none" style={{ color: theme.textPrimary }}>
                     Community
                   </h1>
-                  <p className="text-stone-500 text-[13px] font-normal mt-1">
+                  <p className="text-[13px] font-normal mt-1" style={{ color: theme.textSecondary }}>
                     Reading space & notes sharing
                   </p>
                 </header>
-                <div className="p-4 bg-white border border-stone-200/80 rounded-2xl shadow-2xs mt-3">
-                  <span className="text-[10px] font-bold uppercase text-[#154D43] bg-teal-50 px-2 py-0.5 rounded-full">
+                <div
+                  className="p-4 rounded-2xl shadow-2xs mt-3 border"
+                  style={{
+                    backgroundColor: theme.cardBg,
+                    borderColor: theme.cardBorder,
+                  }}
+                >
+                  <span
+                    className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`,
+                      color: isDark ? theme.mutedAccent : theme.brandPrimary,
+                    }}
+                  >
                     Offline Reading Space
                   </span>
-                  <h4 className="font-bold text-stone-900 text-sm mt-2">
+                  <h4 className="font-bold text-sm mt-2" style={{ color: theme.textPrimary }}>
                     Markdown Export & Study Groups
                   </h4>
-                  <p className="text-stone-500 text-xs mt-1 leading-relaxed">
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: theme.textSecondary }}>
                     Export your notes and highlights as Markdown files from the document menu to share reading insights with your study circle.
                   </p>
                 </div>

@@ -13,12 +13,21 @@ export interface ImportedDocument {
   currentPage: number;
   isFavorite: boolean;
   mimeType: string;
+  folderId?: string | null;
+}
+
+export interface LibraryFolder {
+  id: string;
+  name: string;
+  createdAt: number;
+  color?: string;
 }
 
 const DB_NAME = 'vedora_library_db';
 const DB_VERSION = 1;
 const BLOB_STORE = 'pdf_blobs';
 const METADATA_KEY = 'vedora_imported_documents_v1';
+const FOLDERS_KEY = 'vedora_library_folders_v1';
 const HIGHLIGHTS_PREFIX = 'vedora_highlights_doc_';
 const BOOKMARKS_PREFIX = 'vedora_bookmark_doc_';
 const NOTES_PREFIX = 'vedora_notes_doc_';
@@ -254,6 +263,79 @@ export function toggleDocFavorite(id: string): boolean {
   });
   saveDocumentsMetadata(updated);
   return nextState;
+}
+
+// Load all folders
+export function loadLibraryFolders(): LibraryFolder[] {
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Failed to load library folders:', err);
+    return [];
+  }
+}
+
+// Save all folders
+export function saveLibraryFolders(folders: LibraryFolder[]): void {
+  try {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  } catch (err) {
+    console.error('Failed to save library folders:', err);
+  }
+}
+
+// Create new folder
+export function createLibraryFolder(name: string, color?: string): LibraryFolder {
+  const folders = loadLibraryFolders();
+  const newFolder: LibraryFolder = {
+    id: `folder_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    name: name.trim() || 'Untitled Folder',
+    createdAt: Date.now(),
+    color: color || '#154D43',
+  };
+  folders.push(newFolder);
+  saveLibraryFolders(folders);
+  return newFolder;
+}
+
+// Rename folder
+export function renameLibraryFolder(id: string, newName: string): void {
+  const folders = loadLibraryFolders();
+  const updated = folders.map((f) => (f.id === id ? { ...f, name: newName.trim() } : f));
+  saveLibraryFolders(updated);
+}
+
+// Delete folder and unfile associated documents (preserves all PDFs)
+export function deleteLibraryFolder(id: string): void {
+  const folders = loadLibraryFolders();
+  const updatedFolders = folders.filter((f) => f.id !== id);
+  saveLibraryFolders(updatedFolders);
+
+  const docs = loadDocumentsMetadata();
+  const updatedDocs = docs.map((d) => (d.folderId === id ? { ...d, folderId: null } : d));
+  saveDocumentsMetadata(updatedDocs);
+}
+
+// Delete folder and permanently remove all its document contents
+export async function deleteLibraryFolderAndContents(id: string): Promise<void> {
+  const docs = loadDocumentsMetadata();
+  const docsInFolder = docs.filter((d) => d.folderId === id);
+  for (const doc of docsInFolder) {
+    await deletePdfDocument(doc.id);
+  }
+  const folders = loadLibraryFolders();
+  const updatedFolders = folders.filter((f) => f.id !== id);
+  saveLibraryFolders(updatedFolders);
+}
+
+// Move document to folder
+export function moveDocToFolder(docId: string, folderId: string | null): void {
+  const docs = loadDocumentsMetadata();
+  const updated = docs.map((d) => (d.id === docId ? { ...d, folderId } : d));
+  saveDocumentsMetadata(updated);
 }
 
 // Highlights persistence per document ID

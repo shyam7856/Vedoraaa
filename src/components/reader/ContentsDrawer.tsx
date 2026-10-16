@@ -9,7 +9,12 @@ interface TocItem {
   items?: TocItem[];
 }
 
+// Module-level document TOC cache
+const outlineCache = new Map<string, TocItem[]>();
+const outlineStatusCache = new Map<string, boolean>();
+
 interface ContentsDrawerProps {
+  documentId?: string;
   pdfDoc: PDFDocumentProxy | null;
   totalPages: number;
   currentPage: number;
@@ -20,6 +25,7 @@ interface ContentsDrawerProps {
 }
 
 export const ContentsDrawer: React.FC<ContentsDrawerProps> = ({
+  documentId,
   pdfDoc,
   totalPages,
   currentPage,
@@ -28,13 +34,22 @@ export const ContentsDrawer: React.FC<ContentsDrawerProps> = ({
   onNavigateToPage,
   theme = 'light',
 }) => {
-  const [tocItems, setTocItems] = useState<TocItem[]>([]);
-  const [isLoadingToc, setIsLoadingToc] = useState<boolean>(true);
-  const [hasOutline, setHasOutline] = useState<boolean>(false);
+  const cacheKey = documentId || (pdfDoc as any)?.fingerprint || 'default_doc';
+  const [tocItems, setTocItems] = useState<TocItem[]>(() => outlineCache.get(cacheKey) || []);
+  const [isLoadingToc, setIsLoadingToc] = useState<boolean>(() => !outlineCache.has(cacheKey));
+  const [hasOutline, setHasOutline] = useState<boolean>(() => outlineStatusCache.get(cacheKey) || false);
   const [customPageInput, setCustomPageInput] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen || !pdfDoc) return;
+
+    // If already in cache, restore instantly without any lag or UI stutter
+    if (outlineCache.has(cacheKey)) {
+      setTocItems(outlineCache.get(cacheKey)!);
+      setHasOutline(outlineStatusCache.get(cacheKey) || false);
+      setIsLoadingToc(false);
+      return;
+    }
     let isCancelled = false;
 
     async function parseDest(dest: any): Promise<number | null> {
@@ -91,11 +106,15 @@ export const ContentsDrawer: React.FC<ContentsDrawerProps> = ({
           for (let i = 0; i < rawOutline.length; i++) {
             parsed.push(await processOutlineNode(rawOutline[i], `toc_${i}`));
           }
+          outlineCache.set(cacheKey, parsed);
+          outlineStatusCache.set(cacheKey, true);
           if (!isCancelled) {
             setTocItems(parsed);
             setHasOutline(true);
           }
         } else {
+          outlineCache.set(cacheKey, []);
+          outlineStatusCache.set(cacheKey, false);
           if (!isCancelled) {
             setTocItems([]);
             setHasOutline(false);
@@ -103,6 +122,7 @@ export const ContentsDrawer: React.FC<ContentsDrawerProps> = ({
         }
       } catch (err) {
         console.warn('Failed to parse PDF outline:', err);
+        outlineStatusCache.set(cacheKey, false);
         if (!isCancelled) {
           setHasOutline(false);
         }

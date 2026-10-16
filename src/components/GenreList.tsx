@@ -1,6 +1,7 @@
 import React from 'react';
 import { Compass, BarChart3, Palette, Terminal } from 'lucide-react';
 import { GenreType } from '../types';
+import { useTheme } from '../utils/ThemeContext';
 
 interface GenreListProps {
   onSelectGenre: (genre: GenreType | null) => void;
@@ -13,55 +14,50 @@ export const GenreList: React.FC<GenreListProps> = ({
   selectedGenre,
   onSeeAll,
 }) => {
+  const { theme, isDark } = useTheme();
+
   const genres = [
     {
       id: 'Self Help' as GenreType,
       label: 'Self Help',
       icon: Compass,
-      bgColor: 'bg-[#FFF3E6]',
-      iconColor: 'text-[#EA580C]',
-      hoverBg: 'hover:bg-[#FEE8D1]',
-      activeRing: 'ring-2 ring-[#EA580C]/40',
+      bgColor: isDark ? 'rgba(234, 88, 12, 0.12)' : '#FFF3E6',
+      iconColor: isDark ? '#FB923C' : '#EA580C',
     },
     {
       id: 'Business' as GenreType,
       label: 'Business',
       icon: BarChart3,
-      bgColor: 'bg-[#EEF2FF]',
-      iconColor: 'text-[#4F46E5]',
-      hoverBg: 'hover:bg-[#E0E7FF]',
-      activeRing: 'ring-2 ring-[#4F46E5]/40',
+      bgColor: isDark ? 'rgba(79, 70, 229, 0.12)' : '#EEF2FF',
+      iconColor: isDark ? '#818CF8' : '#4F46E5',
     },
     {
       id: 'Design' as GenreType,
       label: 'Design',
       icon: Palette,
-      bgColor: 'bg-[#FFEAF0]',
-      iconColor: 'text-[#E11D48]',
-      hoverBg: 'hover:bg-[#FDD5DF]',
-      activeRing: 'ring-2 ring-[#E11D48]/40',
+      bgColor: isDark ? 'rgba(225, 29, 72, 0.12)' : '#FFEAF0',
+      iconColor: isDark ? '#FB7185' : '#E11D48',
     },
     {
       id: 'Tech' as GenreType,
       label: 'Tech',
       icon: Terminal,
-      bgColor: 'bg-[#E3F8FA]',
-      iconColor: 'text-[#0891B2]',
-      hoverBg: 'hover:bg-[#CFF0F4]',
-      activeRing: 'ring-2 ring-[#0891B2]/40',
+      bgColor: isDark ? 'rgba(8, 145, 178, 0.12)' : '#E3F8FA',
+      iconColor: isDark ? '#38BDF8' : '#0891B2',
     },
   ];
 
   return (
     <section className="mt-5 pb-6">
       <div className="flex items-center justify-between mb-3 px-0.5">
-        <h2 className="text-[17px] font-bold text-stone-900 tracking-tight">
+        <h2 className="text-[17px] font-bold tracking-tight" style={{ color: theme.textPrimary }}>
           Browse by Genre
         </h2>
         <button
           type="button"
           onClick={onSeeAll}
-          className="text-xs font-semibold text-[#154D43] hover:text-[#0C322B] transition-colors py-1 cursor-pointer"
+          className="text-xs font-semibold transition-colors py-1 cursor-pointer"
+          style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
         >
           See all
         </button>
@@ -79,16 +75,29 @@ export const GenreList: React.FC<GenreListProps> = ({
               className="flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer group"
             >
               <div
-                className={`w-14 h-14 rounded-2xl ${g.bgColor} ${g.hoverBg} ${
-                  isSelected ? g.activeRing : ''
-                } flex items-center justify-center transition-all duration-200 shadow-xs mb-2`}
+                className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-200 shadow-xs mb-2 border"
+                style={{
+                  backgroundColor: g.bgColor,
+                  borderColor: isSelected
+                    ? isDark ? theme.mutedAccent : theme.brandPrimary
+                    : 'transparent',
+                  boxShadow: isSelected
+                    ? isDark
+                      ? `0 0 0 2px ${theme.mutedAccent}`
+                      : `0 0 0 2px ${theme.brandPrimary}`
+                    : 'none',
+                }}
               >
-                <IconComponent className={`w-6 h-6 ${g.iconColor}`} strokeWidth={2.2} />
+                <IconComponent className="w-6 h-6" style={{ color: g.iconColor }} strokeWidth={2.2} />
               </div>
               <span
-                className={`text-[12px] font-medium leading-tight truncate w-full text-center ${
-                  isSelected ? 'text-[#154D43] font-bold' : 'text-stone-800'
-                }`}
+                className="text-[12px] font-medium leading-tight truncate w-full text-center"
+                style={{
+                  fontWeight: isSelected ? 700 : 500,
+                  color: isSelected
+                    ? isDark ? theme.mutedAccent : theme.brandPrimary
+                    : theme.textPrimary,
+                }}
               >
                 {g.label}
               </span>
