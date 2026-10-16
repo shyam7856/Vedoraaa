@@ -61,6 +61,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Safeguard against Android WebView ghost clicks (synthesized click after touch dismiss)
+  const lastMenuActionTimeRef = useRef<number>(0);
+
+  // Document action modals
+  const [docToDelete, setDocToDelete] = useState<ImportedDocument | null>(null);
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+  const [movingDoc, setMovingDoc] = useState<ImportedDocument | null>(null);
+  const [pendingMoveDocId, setPendingMoveDocId] = useState<string | null>(null);
+
   // Folder state
   const [folders, setFolders] = useState<LibraryFolder[]>(() => loadLibraryFolders());
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -68,7 +77,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [editingFolder, setEditingFolder] = useState<LibraryFolder | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
-  const [movingDoc, setMovingDoc] = useState<ImportedDocument | null>(null);
   const [folderMenuId, setFolderMenuId] = useState<string | null>(null);
   const [folderToDelete, setFolderToDelete] = useState<LibraryFolder | null>(null);
 
@@ -149,11 +157,62 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     }
   };
 
-  const handleDeleteDoc = async (id: string, name: string) => {
+  // Card click: blocks accidental activation if menu was just open or closed within 450ms
+  const handleCardClick = (doc: ImportedDocument) => {
+    if (activeMenuDocId) {
+      setActiveMenuDocId(null);
+      lastMenuActionTimeRef.current = Date.now();
+      return;
+    }
+    if (Date.now() - lastMenuActionTimeRef.current < 450) {
+      return; // Suppress Android WebView touch ghost click
+    }
+    handleReadDoc(doc);
+  };
+
+  // Toggle 3-dot menu on card
+  const handleToggleMenu = (e: React.SyntheticEvent, docId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    lastMenuActionTimeRef.current = Date.now();
+    setActiveMenuDocId((prev) => (prev === docId ? null : docId));
+  };
+
+  // Dismiss menu without triggering background cards
+  const handleDismissMenu = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    lastMenuActionTimeRef.current = Date.now();
     setActiveMenuDocId(null);
-    await deletePdfDocument(id);
-    onDocumentsChange();
-    onShowToast(`Deleted "${name}"`);
+  };
+
+  // Menu action wrapper
+  const handleMenuAction = (e: React.SyntheticEvent, action: () => void) => {
+    e.preventDefault();
+    e.stopPropagation();
+    lastMenuActionTimeRef.current = Date.now();
+    setActiveMenuDocId(null);
+    action();
+  };
+
+  // Confirmed deletion of single PDF document
+  const handleConfirmDeleteDoc = async () => {
+    if (!docToDelete) return;
+    const doc = docToDelete;
+    setIsDeletingDoc(true);
+    try {
+      await deletePdfDocument(doc.id);
+      onDocumentsChange();
+      onShowToast(`Deleted "${doc.name}"`);
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+      onShowToast(`Failed to delete "${doc.name}"`);
+    } finally {
+      setIsDeletingDoc(false);
+      setDocToDelete(null);
+    }
   };
 
   const handleToggleFavorite = (id: string) => {
@@ -162,21 +221,54 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     onShowToast(nextState ? 'Added to Favorites' : 'Removed from Favorites');
   };
 
+  // Android-compatible PDF Save / Download / Share
   const handleDownloadOriginal = async (doc: ImportedDocument) => {
-    setActiveMenuDocId(null);
-    const blob = await getPdfBlob(doc.id);
-    if (blob) {
+    try {
+      const blob = await getPdfBlob(doc.id);
+      if (!blob) {
+        onShowToast(`Could not export "${doc.name}": PDF file not found in storage.`);
+        return;
+      }
+
+      const filename = doc.name.endsWith('.pdf') ? doc.name : `${doc.name}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      // First check Web Share API with file support (first-class on Android WebView)
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+      ) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: doc.name,
+          });
+          onShowToast(`Exported "${filename}"`);
+          return;
+        } catch (shareErr: any) {
+          if (shareErr.name === 'AbortError') {
+            return; // User cancelled Android share sheet
+          }
+        }
+      }
+
+      // Fallback: standard anchor blob download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = doc.name;
+      a.download = filename;
+      a.rel = 'noopener noreferrer';
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      onShowToast(`Downloaded "${doc.name}"`);
-    } else {
-      onShowToast('Original PDF file is stored locally');
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1500);
+      onShowToast(`Saved "${filename}"`);
+    } catch (err) {
+      console.error('Failed to save/download PDF:', err);
+      onShowToast(`Failed to save "${doc.name}"`);
     }
   };
 
@@ -222,8 +314,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     setNewFolderName('');
     setIsCreateFolderOpen(false);
     refreshFolders();
-    setActiveFolderId(created.id);
-    onShowToast(`Folder "${created.name}" created`);
+
+    if (pendingMoveDocId) {
+      moveDocToFolder(pendingMoveDocId, created.id);
+      setPendingMoveDocId(null);
+      onDocumentsChange();
+      onShowToast(`Created "${created.name}" and moved document`);
+    } else {
+      setActiveFolderId(created.id);
+      onShowToast(`Folder "${created.name}" created`);
+    }
   };
 
   const handleSaveRenameFolder = (e: React.FormEvent) => {
@@ -320,8 +420,89 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       : folders.find((f) => f.id === activeFolderId)?.name || 'Folder'
     : 'All Documents';
 
+  // Render the card's 3-dot dropdown menu
+  const renderCardMenu = (doc: ImportedDocument) => {
+    if (activeMenuDocId !== doc.id) return null;
+    return (
+      <>
+        {/* Full-screen touch backdrop */}
+        <div
+          className="fixed inset-0 z-40"
+          onPointerDown={handleDismissMenu}
+          onTouchStart={handleDismissMenu}
+          onClick={handleDismissMenu}
+        />
+        {/* Menu overlay positioned above card */}
+        <div
+          className="absolute right-0 top-9 z-50 rounded-2xl shadow-xl border p-1.5 w-44 text-xs font-medium animate-in fade-in zoom-in-95 duration-100 select-none"
+          style={{
+            backgroundColor: theme.cardBg,
+            borderColor: theme.cardBorder,
+            color: theme.textPrimary,
+            WebkitUserSelect: 'none',
+            userSelect: 'none',
+            WebkitTouchCallout: 'none',
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={(e) => handleMenuAction(e, () => handleReadDoc(doc))}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors active:scale-[0.98]"
+            style={{ color: theme.textPrimary }}
+          >
+            <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+            <span>Open Document</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleMenuAction(e, () => setMovingDoc(doc))}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors active:scale-[0.98]"
+            style={{ color: theme.textPrimary }}
+          >
+            <Folder className="w-3.5 h-3.5 shrink-0" style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }} />
+            <span>Move to Folder...</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleMenuAction(e, () => handleDownloadOriginal(doc))}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors active:scale-[0.98]"
+            style={{ color: theme.textPrimary }}
+          >
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span>Save / Download</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleMenuAction(e, () => setDocToDelete(doc))}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 flex items-center gap-2.5 cursor-pointer active:scale-[0.98]"
+          >
+            <Trash2 className="w-3.5 h-3.5 shrink-0" />
+            <span>Delete PDF</span>
+          </button>
+        </div>
+      </>
+    );
+  };
+
   return (
-    <div className="flex-1 px-4 sm:px-5 pt-3 pb-6 flex flex-col min-h-0">
+    <div
+      className="flex-1 px-4 sm:px-5 pt-3 pb-6 flex flex-col min-h-0 select-none ui-non-selectable"
+      style={{
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+      }}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -333,7 +514,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
       <div className="flex-1 flex flex-col min-h-0">
         {/* Header with Title, Sort & Import button */}
-        <header className="flex items-center justify-between pt-1 pb-2.5">
+        <header className="flex items-center justify-between pt-1 pb-2.5 select-none">
           <div>
             <h1 className="font-serif-display font-bold text-[28px] tracking-tight leading-none" style={{ color: theme.textPrimary }}>
               Library
@@ -349,7 +530,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                className="w-10 h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer border"
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer border active:scale-95"
                 style={{
                   backgroundColor: isSortMenuOpen
                     ? isDark ? theme.secondary : theme.brandPrimary
@@ -369,7 +550,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     onClick={() => setIsSortMenuOpen(false)}
                   />
                   <div
-                    className="absolute right-0 top-12 z-40 rounded-2xl shadow-xl border p-2 w-48 text-xs font-medium animate-in fade-in zoom-in-95 duration-150"
+                    className="absolute right-0 top-12 z-40 rounded-2xl shadow-xl border p-2 w-48 text-xs font-medium animate-in fade-in zoom-in-95 duration-150 select-none"
                     style={{
                       backgroundColor: theme.cardBg,
                       borderColor: theme.cardBorder,
@@ -417,7 +598,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               type="button"
               onClick={handleTriggerImport}
               disabled={isImporting}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-95"
               style={{
                 backgroundColor: isDark ? theme.secondary : theme.brandPrimary,
               }}
@@ -429,7 +610,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </header>
 
         {/* Status Filters: All, Recent, Favorites */}
-        <div className="flex items-center gap-2 mt-0.5 pb-1">
+        <div className="flex items-center gap-2 mt-0.5 pb-1 select-none">
           {[
             { id: 'all', label: 'All' },
             { id: 'recent', label: 'Recent' },
@@ -460,12 +641,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </div>
 
         {/* FOLDERS ROW */}
-        <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar select-none">
           {/* All Folders Chip */}
           <button
             type="button"
             onClick={() => setActiveFolderId(null)}
-            className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border"
+            className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border active:scale-95"
             style={{
               backgroundColor: activeFolderId === null
                 ? isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`
@@ -493,7 +674,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveFolderId(isSelected ? null : f.id)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer border"
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer border active:scale-95"
                   style={{
                     backgroundColor: isSelected
                       ? isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`
@@ -516,10 +697,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <button
                   type="button"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     setFolderMenuId(folderMenuId === f.id ? null : f.id);
                   }}
-                  className="p-1 -ml-1 transition-colors"
+                  className="p-1 -ml-1 transition-colors cursor-pointer rounded-lg"
                   style={{ color: theme.textMuted }}
                   title="Folder options"
                 >
@@ -530,10 +712,19 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   <>
                     <div
                       className="fixed inset-0 z-30"
-                      onClick={() => setFolderMenuId(null)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFolderMenuId(null);
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFolderMenuId(null);
+                      }}
                     />
                     <div
-                      className="absolute left-0 top-9 z-40 rounded-2xl shadow-xl border p-1.5 w-36 text-xs animate-in fade-in duration-100"
+                      className="absolute left-0 top-9 z-40 rounded-2xl shadow-xl border p-1.5 w-36 text-xs animate-in fade-in duration-100 select-none"
                       style={{
                         backgroundColor: theme.cardBg,
                         borderColor: theme.cardBorder,
@@ -542,7 +733,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     >
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setFolderMenuId(null);
                           setEditingFolder(f);
                           setEditingFolderName(f.name);
@@ -555,7 +748,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setFolderMenuId(null);
                           setFolderToDelete(f);
                         }}
@@ -576,7 +771,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveFolderId(activeFolderId === '__unfiled' ? null : '__unfiled')}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border active:scale-95"
               style={{
                 backgroundColor: activeFolderId === '__unfiled'
                   ? isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`
@@ -602,7 +797,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           <button
             type="button"
             onClick={() => setIsCreateFolderOpen(true)}
-            className="px-3 py-1.5 rounded-xl text-xs font-medium border border-dashed flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+            className="px-3 py-1.5 rounded-xl text-xs font-medium border border-dashed flex items-center gap-1 shrink-0 cursor-pointer transition-colors active:scale-95"
             style={{
               borderColor: isDark ? `${theme.mutedAccent}60` : `${theme.brandPrimary}50`,
               color: isDark ? theme.mutedAccent : theme.brandPrimary,
@@ -629,7 +824,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={`Search in ${activeFolderName}...`}
-              className="w-full bg-transparent text-[14px] outline-none font-normal"
+              className="w-full bg-transparent text-[14px] outline-none font-normal selectable-text"
               style={{ color: theme.textPrimary }}
             />
             {searchQuery && (
@@ -647,13 +842,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           <button
             type="button"
             onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-            className="w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shrink-0 cursor-pointer border"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shrink-0 cursor-pointer border active:scale-95"
             style={{
               backgroundColor: theme.inputBg,
               borderColor: theme.cardBorder,
               color: theme.textPrimary,
             }}
             title={viewMode === 'list' ? 'Switch to Grid view' : 'Switch to List view'}
+            aria-label={viewMode === 'list' ? 'Switch to Grid view' : 'Switch to List view'}
           >
             {viewMode === 'list' ? (
               <LayoutGrid className="w-4 h-4" />
@@ -665,7 +861,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
         {/* Status / Count bar */}
         {documents.length > 0 && (
-          <div className="flex items-center justify-between text-[11px] mt-2.5 px-1" style={{ color: theme.textSecondary }}>
+          <div className="flex items-center justify-between text-[11px] mt-2.5 px-1 select-none" style={{ color: theme.textSecondary }}>
             <span className="flex items-center gap-1 font-medium">
               <ArrowUpDown className="w-3 h-3" style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }} />
               <span>Folder: <strong style={{ color: theme.textPrimary }}>{activeFolderName}</strong></span>
@@ -677,10 +873,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         )}
 
         {/* Document List / Grid Area */}
-        <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+        <div className="mt-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar select-none">
           {documents.length === 0 ? (
             <div
-              className="my-6 py-8 px-6 rounded-3xl border-2 border-dashed flex flex-col items-center text-center"
+              className="my-6 py-8 px-6 rounded-3xl border-2 border-dashed flex flex-col items-center text-center select-none"
               style={{
                 borderColor: theme.cardBorder,
                 backgroundColor: theme.cardBg,
@@ -750,7 +946,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </div>
             </div>
           ) : processedDocuments.length === 0 ? (
-            <div className="py-12 text-center" style={{ color: theme.textSecondary }}>
+            <div className="py-12 text-center select-none" style={{ color: theme.textSecondary }}>
               <FileText className="w-8 h-8 mx-auto mb-2" style={{ color: theme.textMuted }} />
               <p className="text-sm font-semibold" style={{ color: theme.textPrimary }}>No matching documents</p>
               <p className="text-xs mt-1" style={{ color: theme.textMuted }}>
@@ -761,7 +957,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               {searchQuery ? (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="mt-3 text-xs font-semibold hover:underline"
+                  className="mt-3 text-xs font-semibold hover:underline cursor-pointer"
                   style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                 >
                   Clear search
@@ -769,7 +965,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               ) : (
                 <button
                   onClick={() => setActiveFolderId(null)}
-                  className="mt-3 text-xs font-semibold hover:underline"
+                  className="mt-3 text-xs font-semibold hover:underline cursor-pointer"
                   style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                 >
                   Show all documents
@@ -777,21 +973,27 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               )}
             </div>
           ) : viewMode === 'list' ? (
-            <div className="space-y-2 pb-6">
+            /* LIST VIEW */
+            <div className="space-y-2 pb-6 select-none">
               {processedDocuments.map((doc) => {
                 const folder = folders.find((f) => f.id === doc.folderId);
+                const isMenuOpen = activeMenuDocId === doc.id;
                 return (
                   <div
                     key={doc.id}
-                    onClick={() => handleReadDoc(doc)}
-                    className="border rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer shadow-xs active:scale-[0.99] relative group"
+                    onClick={() => handleCardClick(doc)}
+                    className="library-card border rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer shadow-xs active:scale-[0.99] relative group select-none"
                     style={{
                       backgroundColor: theme.cardBg,
                       borderColor: theme.cardBorder,
+                      zIndex: isMenuOpen ? 40 : 1,
+                      WebkitUserSelect: 'none',
+                      userSelect: 'none',
+                      WebkitTouchCallout: 'none',
                     }}
                   >
                     <div
-                      className="w-12 h-16 rounded-lg border flex flex-col justify-between p-1.5 shrink-0 overflow-hidden shadow-2xs relative"
+                      className="w-12 h-16 rounded-lg border flex flex-col justify-between p-1.5 shrink-0 overflow-hidden shadow-2xs relative select-none"
                       style={{
                         backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F2EFE9',
                         borderColor: theme.cardBorder,
@@ -812,17 +1014,20 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex-1 min-w-0 pr-1">
-                      <h4 className="font-semibold text-xs sm:text-[13px] leading-tight truncate transition-colors" style={{ color: theme.textPrimary }}>
+                    <div className="flex-1 min-w-0 pr-1 select-none">
+                      <h4
+                        className="font-semibold text-xs sm:text-[13px] leading-tight truncate transition-colors select-none"
+                        style={{ color: theme.textPrimary }}
+                      >
                         {doc.name}
                       </h4>
-                      <div className="flex items-center gap-2 text-[11px] mt-1 flex-wrap" style={{ color: theme.textSecondary }}>
-                        <span>{doc.formattedSize}</span>
+                      <div className="flex items-center gap-2 text-[11px] mt-1 flex-wrap select-none" style={{ color: theme.textSecondary }}>
+                        <span className="select-none">{doc.formattedSize}</span>
                         {folder && (
                           <>
                             <span>•</span>
                             <span
-                              className="inline-flex items-center gap-1 font-medium px-1.5 py-0.5 rounded-md"
+                              className="inline-flex items-center gap-1 font-medium px-1.5 py-0.5 rounded-md select-none"
                               style={{
                                 backgroundColor: isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`,
                                 color: isDark ? theme.mutedAccent : theme.brandPrimary,
@@ -837,7 +1042,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                           <>
                             <span>•</span>
                             <span
-                              className="font-semibold tabular-nums"
+                              className="font-semibold tabular-nums select-none"
                               style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}
                             >
                               {doc.progress}% read
@@ -847,7 +1052,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       </div>
                       {doc.progress > 0 && (
                         <div
-                          className="w-full max-w-[120px] h-1 rounded-full overflow-hidden mt-1.5"
+                          className="w-full max-w-[120px] h-1 rounded-full overflow-hidden mt-1.5 select-none"
                           style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}
                         >
                           <div
@@ -865,12 +1070,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       <button
                         type="button"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           handleToggleFavorite(doc.id);
                         }}
-                        className="p-2 transition-colors cursor-pointer"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="p-2 transition-colors cursor-pointer rounded-lg active:scale-95"
                         style={{ color: doc.isFavorite ? '#E11D48' : theme.textMuted }}
                         title={doc.isFavorite ? 'Favorited' : 'Favorite'}
+                        aria-label={doc.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                       >
                         <Heart
                           className={`w-4 h-4 ${
@@ -882,87 +1090,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMenuDocId(activeMenuDocId === doc.id ? null : doc.id);
-                          }}
-                          className="p-2 transition-colors cursor-pointer"
-                          style={{ color: theme.textMuted }}
+                          onClick={(e) => handleToggleMenu(e, doc.id)}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="p-2 transition-colors cursor-pointer rounded-lg active:scale-95"
+                          style={{ color: isMenuOpen ? (isDark ? theme.mutedAccent : theme.brandPrimary) : theme.textMuted }}
                           title="Document options"
+                          aria-label={`Options for ${doc.name}`}
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
 
-                        {activeMenuDocId === doc.id && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-30"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuDocId(null);
-                              }}
-                            />
-                            <div
-                              className="absolute right-0 top-8 z-40 rounded-2xl shadow-xl border p-1.5 w-44 text-xs font-medium animate-in fade-in zoom-in-95 duration-150"
-                              style={{
-                                backgroundColor: theme.cardBg,
-                                borderColor: theme.cardBorder,
-                                color: theme.textPrimary,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveMenuDocId(null);
-                                  handleReadDoc(doc);
-                                }}
-                                className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
-                                style={{ color: theme.textPrimary }}
-                              >
-                                <Play className="w-3.5 h-3.5 fill-current" />
-                                <span>Open Document</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveMenuDocId(null);
-                                  setMovingDoc(doc);
-                                }}
-                                className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
-                                style={{ color: theme.textPrimary }}
-                              >
-                                <Folder className="w-3.5 h-3.5" style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }} />
-                                <span>Move to Folder...</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveMenuDocId(null);
-                                  handleDownloadOriginal(doc);
-                                }}
-                                className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
-                                style={{ color: theme.textPrimary }}
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Save / Download</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteDoc(doc.id, doc.name);
-                                }}
-                                className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 flex items-center gap-2 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Delete PDF</span>
-                              </button>
-                            </div>
-                          </>
-                        )}
+                        {renderCardMenu(doc)}
                       </div>
                     </div>
                   </div>
@@ -970,61 +1108,77 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               })}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 pb-6">
+            /* GRID VIEW */
+            <div className="grid grid-cols-2 gap-3 pb-6 select-none">
               {processedDocuments.map((doc) => {
                 const folder = folders.find((f) => f.id === doc.folderId);
+                const isMenuOpen = activeMenuDocId === doc.id;
                 return (
                   <div
                     key={doc.id}
-                    onClick={() => handleReadDoc(doc)}
-                    className="border rounded-2xl p-3 flex flex-col justify-between transition-all cursor-pointer shadow-xs active:scale-[0.98] group relative"
+                    onClick={() => handleCardClick(doc)}
+                    className="library-card border rounded-2xl p-3 flex flex-col justify-between transition-all cursor-pointer shadow-xs active:scale-[0.98] group relative select-none"
                     style={{
                       backgroundColor: theme.cardBg,
                       borderColor: theme.cardBorder,
+                      zIndex: isMenuOpen ? 40 : 1,
+                      WebkitUserSelect: 'none',
+                      userSelect: 'none',
+                      WebkitTouchCallout: 'none',
                     }}
                   >
-                    <div className="flex items-start justify-between">
-                      <span className="text-[8px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded-xs">
+                    <div className="flex items-start justify-between select-none">
+                      <span className="text-[8px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded-xs select-none">
                         PDF
                       </span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5">
                         <button
                           type="button"
                           onClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
                             handleToggleFavorite(doc.id);
                           }}
-                          className="transition-colors"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="p-1.5 transition-colors cursor-pointer rounded-lg active:scale-95"
                           style={{ color: doc.isFavorite ? '#E11D48' : theme.textMuted }}
+                          title={doc.isFavorite ? 'Favorited' : 'Favorite'}
+                          aria-label={doc.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                         >
                           <Heart
-                            className={`w-4 h-4 ${
+                            className={`w-3.5 h-3.5 ${
                               doc.isFavorite ? 'fill-[#E11D48]' : ''
                             }`}
                           />
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMovingDoc(doc);
-                          }}
-                          style={{ color: theme.textMuted }}
-                          title="Move to Folder"
-                        >
-                          <Folder className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleMenu(e, doc.id)}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="p-1.5 transition-colors cursor-pointer rounded-lg active:scale-95"
+                            style={{ color: isMenuOpen ? (isDark ? theme.mutedAccent : theme.brandPrimary) : theme.textMuted }}
+                            title="Document options"
+                            aria-label={`Options for ${doc.name}`}
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+                          {renderCardMenu(doc)}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="my-4 text-center">
-                      <FileText className="w-10 h-10 mx-auto transition-colors" style={{ color: theme.textMuted }} />
-                      <h4 className="font-semibold text-xs mt-2 leading-tight line-clamp-2" style={{ color: theme.textPrimary }}>
+                    <div className="my-4 text-center select-none">
+                      <FileText className="w-10 h-10 mx-auto transition-colors opacity-75" style={{ color: theme.textMuted }} />
+                      <h4
+                        className="font-semibold text-xs mt-2 leading-tight line-clamp-2 select-none"
+                        style={{ color: theme.textPrimary }}
+                      >
                         {doc.name}
                       </h4>
                       {folder && (
                         <span
-                          className="inline-block text-[10px] font-medium mt-1 px-1.5 py-0.5 rounded-md truncate max-w-full"
+                          className="inline-block text-[10px] font-medium mt-1 px-1.5 py-0.5 rounded-md truncate max-w-full select-none"
                           style={{
                             backgroundColor: isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`,
                             color: isDark ? theme.mutedAccent : theme.brandPrimary,
@@ -1035,16 +1189,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       )}
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] font-medium" style={{ color: theme.textMuted }}>
-                        <span>{doc.formattedSize}</span>
-                        <span className="font-semibold" style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}>
+                    <div className="select-none">
+                      <div className="flex items-center justify-between text-[10px] font-medium select-none" style={{ color: theme.textMuted }}>
+                        <span className="select-none">{doc.formattedSize}</span>
+                        <span className="font-semibold select-none" style={{ color: isDark ? theme.mutedAccent : theme.brandPrimary }}>
                           {doc.progress > 0 ? `${doc.progress}%` : ''}
                         </span>
                       </div>
                       {doc.progress > 0 && (
                         <div
-                          className="w-full h-1 rounded-full overflow-hidden mt-1.5"
+                          className="w-full h-1 rounded-full overflow-hidden mt-1.5 select-none"
                           style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}
                         >
                           <div
@@ -1065,11 +1219,97 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </div>
       </div>
 
+      {/* CONFIRM DELETE DOCUMENT MODAL */}
+      {docToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4 animate-in fade-in duration-150 select-none"
+          onClick={() => {
+            if (!isDeletingDoc) setDocToDelete(null);
+          }}
+        >
+          <div
+            className="rounded-3xl p-5 max-w-sm w-full shadow-2xl border animate-in zoom-in-95 space-y-4"
+            style={{
+              backgroundColor: theme.bg,
+              borderColor: theme.cardBorder,
+              color: theme.textPrimary,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 pb-2 border-b" style={{ borderColor: theme.cardBorder }}>
+              <div className="w-9 h-9 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-serif-display font-bold text-sm sm:text-base leading-tight" style={{ color: theme.textPrimary }}>
+                  Delete Document
+                </h3>
+                <p className="text-[11px] truncate mt-0.5" style={{ color: theme.textSecondary }}>
+                  Remove from your Library
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingDoc}
+                onClick={() => setDocToDelete(null)}
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                style={{
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                  color: theme.textPrimary,
+                }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs leading-relaxed" style={{ color: theme.textSecondary }}>
+              <p>
+                Are you sure you want to remove <strong style={{ color: theme.textPrimary }}>"{docToDelete.name}"</strong> ({docToDelete.formattedSize})?
+              </p>
+              <p
+                className="text-[11px] p-2.5 rounded-xl border leading-normal"
+                style={{
+                  backgroundColor: theme.cardBg,
+                  borderColor: theme.cardBorder,
+                  color: theme.textSecondary,
+                }}
+              >
+                This will remove the document and clear any associated reading progress, bookmarks, and highlights. The original file on your device is not modified.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t" style={{ borderColor: theme.cardBorder }}>
+              <button
+                type="button"
+                disabled={isDeletingDoc}
+                onClick={() => setDocToDelete(null)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition-colors"
+                style={{ color: theme.textSecondary }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingDoc}
+                onClick={handleConfirmDeleteDoc}
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingDoc ? 'Deleting...' : 'Delete PDF'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CREATE FOLDER MODAL */}
       {isCreateFolderOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150"
-          onClick={() => setIsCreateFolderOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150 select-none"
+          onClick={() => {
+            setIsCreateFolderOpen(false);
+            setPendingMoveDocId(null);
+          }}
         >
           <div
             className="rounded-3xl p-5 max-w-xs w-full shadow-2xl border animate-in zoom-in-95"
@@ -1081,12 +1321,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: theme.cardBorder }}>
-              <h3 className="font-serif-display font-bold text-sm" style={{ color: theme.textPrimary }}>
-                Create Library Folder
-              </h3>
+              <div>
+                <h3 className="font-serif-display font-bold text-sm" style={{ color: theme.textPrimary }}>
+                  Create Library Folder
+                </h3>
+                {pendingMoveDocId && (
+                  <p className="text-[10px] mt-0.5" style={{ color: theme.textSecondary }}>
+                    Document will be moved here automatically
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setIsCreateFolderOpen(false)}
+                onClick={() => {
+                  setIsCreateFolderOpen(false);
+                  setPendingMoveDocId(null);
+                }}
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer"
                 style={{
                   backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
@@ -1107,7 +1357,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   placeholder="e.g., Philosophy, Science, Novel..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border outline-none transition-colors"
+                  className="w-full px-3 py-2 text-xs rounded-xl border outline-none transition-colors selectable-text"
                   style={{
                     backgroundColor: theme.inputBg,
                     borderColor: theme.cardBorder,
@@ -1118,7 +1368,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <div className="flex items-center justify-end gap-2 pt-2 border-t" style={{ borderColor: theme.cardBorder }}>
                 <button
                   type="button"
-                  onClick={() => setIsCreateFolderOpen(false)}
+                  onClick={() => {
+                    setIsCreateFolderOpen(false);
+                    setPendingMoveDocId(null);
+                  }}
                   className="px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer"
                   style={{ color: theme.textSecondary }}
                 >
@@ -1127,7 +1380,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <button
                   type="submit"
                   disabled={!newFolderName.trim()}
-                  className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-xs"
+                  className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-xs active:scale-95 transition-all"
                   style={{
                     backgroundColor: isDark ? theme.secondary : theme.brandPrimary,
                   }}
@@ -1143,7 +1396,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       {/* RENAME FOLDER MODAL */}
       {editingFolder && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150 select-none"
           onClick={() => setEditingFolder(null)}
         >
           <div
@@ -1178,7 +1431,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   autoFocus
                   value={editingFolderName}
                   onChange={(e) => setEditingFolderName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border outline-none transition-colors"
+                  className="w-full px-3 py-2 text-xs rounded-xl border outline-none transition-colors selectable-text"
                   style={{
                     backgroundColor: theme.inputBg,
                     borderColor: theme.cardBorder,
@@ -1198,7 +1451,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <button
                   type="submit"
                   disabled={!editingFolderName.trim()}
-                  className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-xs"
+                  className="px-4 py-1.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-xs active:scale-95 transition-all"
                   style={{
                     backgroundColor: isDark ? theme.secondary : theme.brandPrimary,
                   }}
@@ -1214,11 +1467,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       {/* MOVE DOCUMENT TO FOLDER MODAL */}
       {movingDoc && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150 select-none"
           onClick={() => setMovingDoc(null)}
         >
           <div
-            className="rounded-3xl p-5 max-w-xs w-full shadow-2xl border animate-in zoom-in-95 space-y-3"
+            className="rounded-3xl p-5 max-w-xs w-full shadow-2xl border animate-in zoom-in-95 space-y-3 select-none"
             style={{
               backgroundColor: theme.bg,
               borderColor: theme.cardBorder,
@@ -1227,7 +1480,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: theme.cardBorder }}>
-              <div>
+              <div className="min-w-0 pr-2">
                 <h3 className="font-serif-display font-bold text-sm" style={{ color: theme.textPrimary }}>
                   Move to Folder
                 </h3>
@@ -1238,7 +1491,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <button
                 type="button"
                 onClick={() => setMovingDoc(null)}
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer shrink-0"
                 style={{
                   backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                   color: theme.textPrimary,
@@ -1253,7 +1506,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleMoveDocToFolder(movingDoc.id, null)}
-                className="w-full text-left p-2.5 rounded-xl border flex items-center justify-between transition-colors text-xs cursor-pointer"
+                className="w-full text-left p-2.5 rounded-xl border flex items-center justify-between transition-colors text-xs cursor-pointer active:scale-[0.98]"
                 style={{
                   backgroundColor: !movingDoc.folderId
                     ? isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`
@@ -1282,7 +1535,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     key={f.id}
                     type="button"
                     onClick={() => handleMoveDocToFolder(movingDoc.id, f.id)}
-                    className="w-full text-left p-2.5 rounded-xl border flex items-center justify-between transition-colors text-xs cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl border flex items-center justify-between transition-colors text-xs cursor-pointer active:scale-[0.98]"
                     style={{
                       backgroundColor: isCur
                         ? isDark ? `${theme.secondary}30` : `${theme.brandPrimary}15`
@@ -1316,7 +1569,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const doc = movingDoc;
                   setMovingDoc(null);
+                  if (doc) {
+                    setPendingMoveDocId(doc.id);
+                  }
                   setIsCreateFolderOpen(true);
                 }}
                 className="text-xs font-semibold hover:underline flex items-center gap-1 cursor-pointer"
@@ -1341,7 +1598,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       {/* DELETE FOLDER CONFIRMATION MODAL */}
       {folderToDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-2xs p-4 animate-in fade-in duration-150 select-none"
           onClick={() => setFolderToDelete(null)}
         >
           <div
@@ -1391,7 +1648,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmDeleteFolderOnly}
-                className="w-full p-3 rounded-2xl border text-left transition-all cursor-pointer group"
+                className="w-full p-3 rounded-2xl border text-left transition-all cursor-pointer group active:scale-[0.99]"
                 style={{
                   backgroundColor: theme.cardBg,
                   borderColor: theme.cardBorder,
@@ -1408,7 +1665,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmDeleteFolderAndContents}
-                className="w-full p-3 rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition-all cursor-pointer group"
+                className="w-full p-3 rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition-all cursor-pointer group active:scale-[0.99]"
               >
                 <div className="text-xs font-semibold text-rose-700 dark:text-rose-400">
                   Remove Folder and All Contents

@@ -1,4 +1,4 @@
-export type HighlightColor = 'yellow' | 'teal' | 'rose' | 'blue' | 'purple';
+export type HighlightColor = 'yellow' | 'green' | 'pink' | 'blue' | 'purple' | 'teal' | 'rose';
 
 export const PASTEL_COLORS: {
   id: HighlightColor;
@@ -6,11 +6,11 @@ export const PASTEL_COLORS: {
   hex: string;
   bgClass: string;
 }[] = [
-  { id: 'yellow', name: 'Muted Lemon', hex: '#FEF08A', bgClass: 'vedora-hl-yellow' },
-  { id: 'teal', name: 'Seafoam Teal', hex: '#99F6E4', bgClass: 'vedora-hl-teal' },
-  { id: 'rose', name: 'Soft Rose', hex: '#FECDD3', bgClass: 'vedora-hl-rose' },
-  { id: 'blue', name: 'Sky Blue', hex: '#BFDBFE', bgClass: 'vedora-hl-blue' },
-  { id: 'purple', name: 'Lavender', hex: '#DDD6FE', bgClass: 'vedora-hl-purple' },
+  { id: 'yellow', name: 'Yellow', hex: '#FFE66D', bgClass: 'vedora-hl-yellow' },
+  { id: 'green', name: 'Mint Green', hex: '#A8E6CF', bgClass: 'vedora-hl-green' },
+  { id: 'pink', name: 'Coral Pink', hex: '#FFB3B3', bgClass: 'vedora-hl-pink' },
+  { id: 'blue', name: 'Sky Blue', hex: '#9ED8F5', bgClass: 'vedora-hl-blue' },
+  { id: 'purple', name: 'Lavender Purple', hex: '#D8B4F8', bgClass: 'vedora-hl-purple' },
 ];
 
 export interface HighlightRect {

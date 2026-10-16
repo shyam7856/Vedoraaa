@@ -15,7 +15,8 @@ export interface ContinuousLayoutProps {
   rotation: number;
   theme: ReaderTheme;
   highlights: HighlightItem[];
-  onSelectHighlight: (hl: HighlightItem) => void;
+  onSelectHighlight: (hl: HighlightItem, clickInfo?: { clientX: number; clientY: number }) => void;
+  pulsingHighlightId?: string | null;
   activeSearchMatch?: SearchMatchItem | null;
   scrollToPageTarget?: number | null;
   onScrollTargetCompleted?: () => void;
@@ -34,6 +35,7 @@ export const ContinuousLayout: React.FC<ContinuousLayoutProps> = ({
   theme,
   highlights,
   onSelectHighlight,
+  pulsingHighlightId,
   activeSearchMatch,
   scrollToPageTarget,
   onScrollTargetCompleted,
@@ -159,7 +161,7 @@ export const ContinuousLayout: React.FC<ContinuousLayoutProps> = ({
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
-    <div className="flex flex-col items-center relative py-4 sm:py-6 select-text">
+    <div className="flex flex-col items-center relative py-0 sm:py-1 select-text w-full">
       {pages.map((pageNum) => {
         const isPriority = pageNum >= priorityStart && pageNum <= priorityEnd;
         const pageHighlights = highlights.filter((h) => h.page === pageNum);
@@ -176,6 +178,7 @@ export const ContinuousLayout: React.FC<ContinuousLayoutProps> = ({
             theme={theme}
             highlights={pageHighlights}
             onSelectHighlight={onSelectHighlight}
+            pulsingHighlightId={pulsingHighlightId}
             activeSearchMatch={activeSearchMatch}
             priority={isPriority}
             scrollContainerRef={scrollContainerRef}
@@ -183,6 +186,13 @@ export const ContinuousLayout: React.FC<ContinuousLayoutProps> = ({
               pageElementsRef.current[pageNum] = el;
             }}
             totalPages={totalPages}
+            className={`mb-2 sm:mb-2.5 ${
+              theme === 'dark'
+                ? 'border-b border-white/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
+                : theme === 'sepia'
+                ? 'border-b border-[#927B5C]/15 shadow-[0_1px_2px_rgba(58,48,38,0.04)]'
+                : 'border-b border-black/[0.05] shadow-[0_1px_2px_rgba(40,30,20,0.03)]'
+            }`}
           />
         );
       })}

@@ -16,7 +16,8 @@ export interface SinglePageLayoutProps {
   rotation: number;
   theme: ReaderTheme;
   highlights: HighlightItem[];
-  onSelectHighlight: (hl: HighlightItem) => void;
+  onSelectHighlight: (hl: HighlightItem, clickInfo?: { clientX: number; clientY: number }) => void;
+  pulsingHighlightId?: string | null;
   activeSearchMatch?: SearchMatchItem | null;
   scrollToPageTarget?: number | null;
   onScrollTargetCompleted?: () => void;
@@ -34,6 +35,7 @@ export const SinglePageLayout: React.FC<SinglePageLayoutProps> = ({
   theme,
   highlights,
   onSelectHighlight,
+  pulsingHighlightId,
   activeSearchMatch,
   scrollToPageTarget,
   onScrollTargetCompleted,
@@ -95,6 +97,15 @@ export const SinglePageLayout: React.FC<SinglePageLayoutProps> = ({
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (zoomScale > 1.05 || touchStartXRef.current === null || touchStartYRef.current === null) return;
+    
+    // Do not trigger page turn if text is selected (Requirement 1)
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
+      touchStartXRef.current = null;
+      touchStartYRef.current = null;
+      return;
+    }
+
     const touchEndX = e.changedTouches[0].clientX;
     const touchEndY = e.changedTouches[0].clientY;
     const diffX = touchEndX - touchStartXRef.current;
@@ -118,7 +129,7 @@ export const SinglePageLayout: React.FC<SinglePageLayoutProps> = ({
     <div
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      className="relative flex flex-col items-center justify-center min-h-full py-4 sm:py-6 select-text"
+      className="relative flex flex-col items-center justify-center min-h-full py-0 select-text w-full"
     >
       {/* Floating Left / Right Turn Buttons */}
       <div className="fixed inset-y-0 left-2 right-2 pointer-events-none z-30 flex items-center justify-between">
@@ -170,9 +181,11 @@ export const SinglePageLayout: React.FC<SinglePageLayoutProps> = ({
           theme={theme}
           highlights={highlights.filter((h) => h.page === validTarget)}
           onSelectHighlight={onSelectHighlight}
+          pulsingHighlightId={pulsingHighlightId}
           activeSearchMatch={activeSearchMatch}
           priority={true}
           totalPages={totalPages}
+          className="mb-0 border-none shadow-none"
         />
       </div>
     </div>

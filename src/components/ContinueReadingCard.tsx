@@ -20,7 +20,7 @@ export const ContinueReadingCard: React.FC<ContinueReadingCardProps> = ({
   return (
     <div
       onClick={() => onOpenDetails(book)}
-      className="text-white rounded-[26px] p-4 sm:p-5 shadow-sm relative overflow-hidden cursor-pointer transition-all hover:shadow-md active:scale-[0.99] group"
+      className="text-white rounded-[26px] p-4 sm:p-5 shadow-sm relative overflow-hidden cursor-pointer transition-all hover:shadow-md active:scale-[0.99] group select-none"
       style={{
         backgroundColor: theme.brandPrimary,
         boxShadow: `0 8px 24px -4px ${theme.brandPrimary}40`,

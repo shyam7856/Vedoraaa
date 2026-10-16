@@ -56,7 +56,7 @@ export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
   ];
 
   return (
-    <section className="mt-5">
+    <section className="mt-5 select-none">
       <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
         {shortcuts.map((item) => {
           const IconComponent = item.icon;
@@ -66,7 +66,7 @@ export const ShortcutTiles: React.FC<ShortcutTilesProps> = ({
               key={item.id}
               type="button"
               onClick={() => onSelectCategory(item.id)}
-              className="rounded-2xl py-3 px-1.5 flex flex-col items-center justify-center text-center transition-all duration-200 active:scale-95 cursor-pointer shadow-xs border"
+              className="rounded-2xl py-3 px-1.5 flex flex-col items-center justify-center text-center transition-all duration-200 active:scale-95 cursor-pointer shadow-xs border select-none"
               style={{
                 backgroundColor: isDark ? theme.cardBg : item.tintBg,
                 borderColor: isActive

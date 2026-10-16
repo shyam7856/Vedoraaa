@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { AlertCircle, RotateCw, Info, Search, Loader2 } from 'lucide-react';
+import { AlertCircle, RotateCw, Info, Search } from 'lucide-react';
 import { HighlightItem, ReaderTheme, PASTEL_COLORS } from '../../types';
 import { renderPdfPageComplete } from '../../utils/pdfRenderer';
 import { SearchMatchItem } from './SearchToolbar';
@@ -14,7 +14,8 @@ export interface PdfPageItemProps {
   rotation: number;
   theme: ReaderTheme;
   highlights: HighlightItem[];
-  onSelectHighlight: (hl: HighlightItem) => void;
+  onSelectHighlight: (hl: HighlightItem, clickInfo?: { clientX: number; clientY: number }) => void;
+  pulsingHighlightId?: string | null;
   activeSearchMatch?: SearchMatchItem | null;
   priority?: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
@@ -35,6 +36,7 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
   theme,
   highlights,
   onSelectHighlight,
+  pulsingHighlightId,
   activeSearchMatch,
   priority = false,
   scrollContainerRef,
@@ -50,6 +52,7 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
   const [status, setStatus] = useState<'idle' | 'rendering' | 'rendered' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isScanned, setIsScanned] = useState<boolean>(false);
+  const [showOcrNotice, setShowOcrNotice] = useState<boolean>(false);
   const isRenderingRef = useRef<boolean>(false);
   const pendingRenderRef = useRef<boolean>(false);
   const renderedKeyRef = useRef<string>('');
@@ -97,7 +100,6 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
         );
 
         if (result.cancelled) {
-          // Render cancelled before atomic swap; do not mark rendered so it can re-render fresh
           setStatus((prev) => (renderedKeyRef.current ? 'rendered' : 'idle'));
           return;
         }
@@ -173,6 +175,65 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
     };
   }, [priority, renderKey, scrollContainerRef, doRender]);
 
+  // Touch tracking to distinguish tap from drag/swipe
+  const touchStartPosRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handlePointerDown = (clientX: number, clientY: number) => {
+    touchStartPosRef.current = { x: clientX, y: clientY, time: Date.now() };
+  };
+
+  const checkHighlightHit = (clientX: number, clientY: number): boolean => {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
+      return false;
+    }
+
+    const container = containerRef.current;
+    if (!container || highlights.length === 0) return false;
+
+    const pageRect = container.getBoundingClientRect();
+    const clickX = ((clientX - pageRect.left) / pageRect.width) * 100;
+    const clickY = ((clientY - pageRect.top) / pageRect.height) * 100;
+
+    // Check highlights in reverse order (most recent first)
+    for (let i = highlights.length - 1; i >= 0; i--) {
+      const hl = highlights[i];
+      if (!hl.rects || hl.rects.length === 0) continue;
+      const hit = hl.rects.some(
+        (r) =>
+          clickX >= r.left - 1.5 &&
+          clickX <= r.left + r.width + 1.5 &&
+          clickY >= r.top - 1.5 &&
+          clickY <= r.top + r.height + 1.5
+      );
+      if (hit) {
+        onSelectHighlight(hl, { clientX, clientY });
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const handlePageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    checkHighlightHit(e.clientX, e.clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartPosRef.current) return;
+    const start = touchStartPosRef.current;
+    touchStartPosRef.current = null;
+
+    if (e.changedTouches.length === 1) {
+      const touch = e.changedTouches[0];
+      const dist = Math.hypot(touch.clientX - start.x, touch.clientY - start.y);
+      const timeDiff = Date.now() - start.time;
+      // If it was a quick tap (< 350ms and moved < 10px), check highlight hit
+      if (dist < 10 && timeDiff < 350) {
+        checkHighlightHit(touch.clientX, touch.clientY);
+      }
+    }
+  };
+
   return (
     <div
       id={`vedora-pdf-page-${pageNum}`}
@@ -181,13 +242,14 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
         containerRef.current = el;
         pageContainerRef?.(el);
       }}
-      className={`relative mb-5 sm:mb-6 rounded-xl mx-auto border transition-all duration-200 select-text ${
-        theme === 'dark'
-          ? 'border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.45)]'
-          : theme === 'sepia'
-          ? 'border-[#927B5C]/20 shadow-[0_2px_14px_rgba(58,48,38,0.08)]'
-          : 'border-black/[0.08] shadow-[0_2px_14px_rgba(40,30,20,0.06)]'
-      } ${className}`}
+      onClick={handlePageClick}
+      onTouchStart={(e) => {
+        if (e.touches.length === 1) {
+          handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }}
+      onTouchEnd={handleTouchEnd}
+      className={`relative mx-auto select-text ${className}`}
       style={{
         width: `${pageWidth}px`,
         height: `${pageHeight}px`,
@@ -202,7 +264,7 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
         </div>
       )}
 
-      {/* Elegant loading placeholder before first render */}
+      {/* Loading placeholder before first render */}
       {status === 'idle' || (status === 'rendering' && renderedKeyRef.current === '') ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 text-stone-400 dark:text-zinc-600">
           <div className="w-8 h-8 rounded-full border-2 border-stone-300 dark:border-zinc-700 border-t-[#154D43] dark:border-t-teal-400 animate-spin mb-2" />
@@ -230,22 +292,39 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
         </div>
       ) : (
         <>
-          {/* LAYER 1: SAVED PASTEL HIGHLIGHTS */}
-          <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden rounded-xl">
+          {/* LAYER 1: CANVAS (PDF rendering) */}
+          <canvas
+            ref={canvasRef}
+            style={{
+              width: '100%',
+              height: '100%',
+              filter: canvasFilter,
+            }}
+            className="relative z-1 block bg-transparent pointer-events-none select-none transition-[filter] duration-200"
+          />
+
+          {/* LAYER 2: HIGHLIGHT OVERLAYS (Rendered on top of canvas, below text layer) */}
+          <div className="absolute inset-0 pointer-events-none z-2 overflow-hidden">
             {highlights.map((hl) => {
               const colorConfig = PASTEL_COLORS.find((c) => c.id === hl.color) || PASTEL_COLORS[0];
+              const isPulsing = pulsingHighlightId === hl.id;
               return (
                 <React.Fragment key={hl.id}>
                   {hl.rects && hl.rects.length > 0 ? (
                     hl.rects.map((rect, rIdx) => (
                       <div
                         key={rIdx}
-                        className={`absolute rounded-xs ${colorConfig.bgClass}`}
+                        className={`absolute rounded-xs vedora-highlight-overlay ${colorConfig.bgClass} ${
+                          isPulsing ? 'vedora-highlight-pulse' : ''
+                        }`}
                         style={{
                           top: `${rect.top}%`,
                           left: `${rect.left}%`,
                           width: `${rect.width}%`,
                           height: `${rect.height}%`,
+                          backgroundColor: colorConfig.hex,
+                          opacity: theme === 'dark' ? 0.42 : 0.48,
+                          mixBlendMode: theme === 'dark' ? 'screen' : 'multiply',
                         }}
                       />
                     ))
@@ -261,21 +340,10 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
             })}
           </div>
 
-          {/* LAYER 2: CANVAS */}
-          <canvas
-            ref={canvasRef}
-            style={{
-              width: '100%',
-              height: '100%',
-              filter: canvasFilter,
-            }}
-            className="relative z-1 block bg-transparent pointer-events-none select-none rounded-xl transition-[filter] duration-200"
-          />
-
-          {/* LAYER 3: SELECTABLE TEXT LAYER */}
+          {/* LAYER 3: SELECTABLE TEXT LAYER (PDF.js textLayer for text selection and selection handles) */}
           <div
             ref={textLayerRef}
-            className="textLayer select-text rounded-xl"
+            className="textLayer select-text"
             style={{
               zIndex: 3,
               width: '100%',
@@ -283,50 +351,39 @@ export const PdfPageItem: React.FC<PdfPageItemProps> = ({
             }}
           />
 
-          {/* LAYER 4: INTERACTIVE HIGHLIGHT HIT AREAS */}
-          <div className="absolute inset-0 pointer-events-none z-3 overflow-hidden">
-            {highlights.map((hl) => (
-              <React.Fragment key={`hit_${hl.id}`}>
-                {hl.rects && hl.rects.length > 0 ? (
-                  hl.rects.map((rect, rIdx) => (
-                    <div
-                      key={rIdx}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const sel = window.getSelection();
-                        if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
-                          onSelectHighlight(hl);
-                        }
-                      }}
-                      className="absolute rounded-xs pointer-events-auto cursor-pointer bg-transparent"
-                      style={{
-                        top: `${rect.top}%`,
-                        left: `${rect.left}%`,
-                        width: `${rect.width}%`,
-                        height: `${rect.height}%`,
-                      }}
-                      title={`Highlight: "${hl.text.slice(0, 40)}..." (Click to manage)`}
-                    />
-                  ))
-                ) : (
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectHighlight(hl);
-                    }}
-                    className="absolute top-2 left-2 px-2 py-1 rounded-md text-[10px] font-medium pointer-events-auto cursor-pointer bg-transparent"
-                    style={{ width: '120px', height: '24px' }}
-                  />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-
-          {/* Scanned / Image-based indicator */}
+          {/* Scanned / Image-based indicator with clear OCR explanation (Requirement 7) */}
           {isScanned && (
-            <div className="absolute top-2 right-2 bg-stone-800/80 backdrop-blur-xs text-white text-[9px] font-medium px-2 py-0.5 rounded-full pointer-events-none z-20 flex items-center gap-1 shadow-xs">
-              <Info className="w-2.5 h-2.5" />
-              <span>Image-based page</span>
+            <div className="absolute top-2 right-2 z-20">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowOcrNotice((prev) => !prev);
+                }}
+                className="bg-stone-800/85 hover:bg-stone-800 backdrop-blur-xs text-white text-[9px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                title="Click for scanned document information"
+              >
+                <Info className="w-2.5 h-2.5 text-amber-400" />
+                <span>Image-based (OCR required)</span>
+              </button>
+              {showOcrNotice && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 top-6 w-56 p-2.5 bg-stone-900/95 text-white text-[10px] rounded-xl shadow-xl border border-white/20 backdrop-blur-md animate-in fade-in duration-150 leading-relaxed"
+                >
+                  <p className="font-semibold text-amber-300 mb-0.5">Scanned Image PDF</p>
+                  <p className="text-stone-300">
+                    This page consists of scanned images without embedded text. Text selection and highlighting require OCR (Optical Character Recognition) processing.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrNotice(false)}
+                    className="mt-1.5 text-[9px] font-bold text-teal-300 hover:underline cursor-pointer"
+                  >
+                    Got it
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

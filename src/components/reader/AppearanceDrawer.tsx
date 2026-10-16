@@ -2,16 +2,11 @@ import React from 'react';
 import {
   X,
   ZoomIn,
-  ZoomOut,
-  Maximize2,
   Sun,
   Moon,
   Coffee,
-  ScrollText,
-  FileText,
   Sliders,
   Type,
-  Info,
   Minus,
   Plus,
   Eye,
@@ -26,8 +21,8 @@ interface AppearanceDrawerProps {
   onChangeTheme: (theme: ReaderTheme) => void;
   zoomScale: number;
   onChangeZoom: (newZoom: number) => void;
-  viewMode: ReaderViewMode;
-  onChangeViewMode: (mode: ReaderViewMode) => void;
+  viewMode?: ReaderViewMode;
+  onChangeViewMode?: (mode: ReaderViewMode) => void;
   fontFamily: ReaderFont;
   onChangeFont: (font: ReaderFont) => void;
   brightness?: number;
@@ -47,8 +42,8 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
   onChangeTheme,
   zoomScale,
   onChangeZoom,
-  viewMode,
-  onChangeViewMode,
+  viewMode: _viewMode,
+  onChangeViewMode: _onChangeViewMode,
   fontFamily,
   onChangeFont,
   brightness = 100,
@@ -77,7 +72,7 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
     ? 'bg-[#FAF4E8] border-[#E2D8C7]'
     : 'bg-[#FBF8F2] border-[#E4DCCE]';
 
-  // Elegant outlined selection styling (subtle background, clean green/teal outline, strong contrast)
+  // Elegant outlined selection styling
   const selectedStyle = isDark
     ? 'border-2 border-teal-400 bg-teal-500/15 text-teal-200 shadow-xs'
     : 'border-2 border-[#154D43] bg-[#154D43]/10 text-[#154D43] shadow-xs';
@@ -121,7 +116,7 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
 
         {/* Scrollable Settings Content */}
         <div className="p-5 overflow-y-auto space-y-4 font-sans text-xs">
-          {/* 1. Theme Palette with elegant outlined selection */}
+          {/* 1. Theme Palette */}
           <div className={`p-4 rounded-2xl border ${cardBg}`}>
             <span className="text-[11px] font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider block mb-2.5">
               Theme Palette
@@ -171,49 +166,7 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
             </div>
           </div>
 
-          {/* 2. Reading Layout Mode with elegant outlined selection */}
-          <div className={`p-4 rounded-2xl border ${cardBg}`}>
-            <span className="text-[11px] font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider block mb-2.5">
-              Reading Layout
-            </span>
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                {
-                  id: 'continuous',
-                  label: 'Continuous Scroll',
-                  sub: 'Vertical Flow',
-                  icon: ScrollText,
-                },
-                {
-                  id: 'single',
-                  label: 'Single Page',
-                  sub: 'Focused Page',
-                  icon: FileText,
-                },
-              ].map((m) => {
-                const Icon = m.icon;
-                const isSelected = viewMode === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => onChangeViewMode(m.id as ReaderViewMode)}
-                    className={`p-3 rounded-2xl flex flex-col items-center text-center gap-1.5 transition-all cursor-pointer ${
-                      isSelected ? selectedStyle : unselectedStyle
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 shrink-0 text-[#154D43] dark:text-teal-400" />
-                    <div>
-                      <div className="text-xs font-bold leading-tight">{m.label}</div>
-                      <div className="text-[10px] opacity-75 mt-0.5">{m.sub}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 3. Font (Renamed from Reading Typography) */}
+          {/* 2. Font Settings */}
           <div className={`p-4 rounded-2xl border ${cardBg}`}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -278,18 +231,9 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Authentic PDF typography notice */}
-            <div className="mt-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-stone-600 dark:text-zinc-300 flex items-start gap-2 leading-relaxed">
-              <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                Applies to reader interface, notes, annotations, and text search layer.
-                <strong className="font-semibold block mt-0.5">Note:</strong> Original PDF pages retain their author-embedded vector typography.
-              </span>
-            </div>
           </div>
 
-          {/* 4. Brightness & Screen Controls */}
+          {/* 3. Brightness & Screen Controls */}
           {onChangeBrightness && (
             <div className={`p-4 rounded-2xl border ${cardBg}`}>
               <div className="flex items-center justify-between mb-2">
@@ -354,65 +298,57 @@ export const AppearanceDrawer: React.FC<AppearanceDrawerProps> = ({
             </div>
           )}
 
-          {/* 5. PDF Page Zoom */}
+          {/* 4. PDF Page Zoom - Synchronized Zoom Slider with ±10% Stepper Buttons */}
           <div className={`p-4 rounded-2xl border ${cardBg}`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider">
-                PDF Page Zoom
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] font-semibold text-[#777064] dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <ZoomIn className="w-3.5 h-3.5 text-[#154D43] dark:text-teal-400" />
+                <span>Page Zoom</span>
               </span>
               <span className="text-xs font-bold text-[#154D43] dark:text-teal-400 tabular-nums">
                 {zoomPercent}%
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => onChangeZoom(Math.max(0.6, parseFloat((zoomScale - 0.15).toFixed(2))))}
-                className="flex-1 py-2 rounded-xl border border-[#E4DCCE] dark:border-zinc-700 flex items-center justify-center gap-1.5 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                onClick={() => {
+                  const currentPercent = Math.round(zoomScale * 100);
+                  const nextPercent = Math.max(50, currentPercent - 10);
+                  onChangeZoom(nextPercent / 100);
+                }}
+                className="w-8 h-8 rounded-xl border border-[#E4DCCE] dark:border-zinc-700 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer text-stone-700 dark:text-zinc-300 shrink-0"
+                aria-label="Decrease zoom by 10 percentage points"
+                title="Decrease zoom by 10%"
               >
-                <ZoomOut className="w-3.5 h-3.5" />
-                <span>Zoom Out</span>
+                <Minus className="w-3.5 h-3.5" />
               </button>
+              <input
+                type="range"
+                min="50"
+                max="250"
+                step="5"
+                value={zoomPercent}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  onChangeZoom(val / 100);
+                }}
+                className="flex-1 accent-[#154D43] dark:accent-teal-400 h-1.5 bg-[#E4DCCE] dark:bg-zinc-700 rounded-lg cursor-pointer"
+                aria-label="Zoom slider"
+              />
               <button
                 type="button"
-                onClick={() => onChangeZoom(1.0)}
-                className="py-2 px-3 rounded-xl border border-[#E4DCCE] dark:border-zinc-700 flex items-center justify-center gap-1 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-                title="Fit to Width (100%)"
+                onClick={() => {
+                  const currentPercent = Math.round(zoomScale * 100);
+                  const nextPercent = Math.min(250, currentPercent + 10);
+                  onChangeZoom(nextPercent / 100);
+                }}
+                className="w-8 h-8 rounded-xl border border-[#E4DCCE] dark:border-zinc-700 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer text-stone-700 dark:text-zinc-300 shrink-0"
+                aria-label="Increase zoom by 10 percentage points"
+                title="Increase zoom by 10%"
               >
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span>Fit Width</span>
+                <Plus className="w-3.5 h-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={() => onChangeZoom(Math.min(3.0, parseFloat((zoomScale + 0.15).toFixed(2))))}
-                className="flex-1 py-2 rounded-xl border border-[#E4DCCE] dark:border-zinc-700 flex items-center justify-center gap-1.5 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-                <span>Zoom In</span>
-              </button>
-            </div>
-            {/* Quick Zoom Presets */}
-            <div className="flex items-center justify-between gap-1.5 mt-2.5">
-              {[0.75, 1.0, 1.25, 1.5, 2.0].map((scale) => {
-                const pct = Math.round(scale * 100);
-                const isCur = Math.abs(zoomScale - scale) < 0.05;
-                return (
-                  <button
-                    key={pct}
-                    type="button"
-                    onClick={() => onChangeZoom(scale)}
-                    className={`flex-1 py-1 text-[11px] font-medium rounded-lg tabular-nums cursor-pointer transition-colors ${
-                      isCur
-                        ? 'bg-[#154D43] text-white font-bold'
-                        : isDark
-                        ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                        : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-                    }`}
-                  >
-                    {pct}%
-                  </button>
-                );
-              })}
             </div>
           </div>
         </div>
